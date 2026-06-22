@@ -11,6 +11,8 @@ import Health from "@/pages/Health";
 import Goals from "@/pages/Goals";
 import Documents from "@/pages/Documents";
 import Family from "@/pages/Family";
+import Travel from "@/pages/Travel";
+import Career from "@/pages/Career";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -41,6 +43,8 @@ export default function App() {
             <Route path="goals" element={<Goals />} />
             <Route path="documents" element={<Documents />} />
             <Route path="family" element={<Family />} />
+            <Route path="travel" element={<Travel />} />
+            <Route path="career" element={<Career />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

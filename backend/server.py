@@ -27,7 +27,7 @@ from auth import (
     hash_password, verify_password, create_token, get_current_user_id, decode_token
 )
 from storage import put_object, get_object, init_storage, guess_mime, APP_NAME
-from ai_parser import parse_universal
+from ai_parser import parse_universal, parse_image_file
 
 # ---------------- Setup ----------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -96,6 +96,7 @@ class TransactionIn(BaseModel):
     category: str
     merchant: Optional[str] = None
     note: Optional[str] = None
+    trip_id: Optional[str] = None
 
 
 class InvestmentIn(BaseModel):
@@ -238,91 +239,97 @@ def _extract_pdf_text(data: bytes) -> str:
     return "\n".join(text_parts)
 
 
-async def _apply_parsed(user_id: str, parsed: dict, default_member_id: Optional[str]) -> dict:
+async def _apply_parsed(user_id: str, parsed: dict, default_member_id: Optional[str], document_id: Optional[str] = None) -> dict:
     """Persist whatever the AI returned into the right collections."""
     member_hint = parsed.get("member_hint")
     member_id = await _resolve_member(user_id, member_hint, default_member_id)
     counts = {"transactions": 0, "investments": 0, "loans": 0,
-              "lab_results": 0, "prescriptions": 0, "vitals": 0, "generic_entries": 0}
+              "lab_results": 0, "prescriptions": 0, "vitals": 0,
+              "trips": 0, "career_events": 0, "generic_entries": 0}
+
+    def _base(extra: dict) -> dict:
+        b = {"id": new_id(), "user_id": user_id, "member_id": member_id,
+             "created_at": now_iso(), **extra}
+        if document_id:
+            b["origin_document_id"] = document_id
+        return b
 
     for t in parsed.get("transactions", []) or []:
-        await db.transactions.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.transactions.insert_one(_base({
             "date": t.get("date") or today_str(),
             "amount": float(t.get("amount", 0)),
             "type": t.get("type", "expense"),
             "category": t.get("category", "other"),
-            "merchant": t.get("merchant"),
-            "note": t.get("note"),
-            "created_at": now_iso(),
-        })
+            "merchant": t.get("merchant"), "note": t.get("note"),
+        }))
         counts["transactions"] += 1
 
     for inv in parsed.get("investments", []) or []:
-        await db.investments.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
-            "name": inv.get("name", "Unknown"),
-            "kind": inv.get("kind", "other"),
-            "units": inv.get("units"),
-            "current_value": inv.get("current_value"),
+        await db.investments.insert_one(_base({
+            "name": inv.get("name", "Unknown"), "kind": inv.get("kind", "other"),
+            "units": inv.get("units"), "current_value": inv.get("current_value"),
             "invested_value": inv.get("invested_value"),
-            "created_at": now_iso(),
-        })
+        }))
         counts["investments"] += 1
 
     for loan in parsed.get("loans", []) or []:
-        await db.loans.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.loans.insert_one(_base({
             "name": loan.get("name", "Loan"),
             "outstanding": float(loan.get("outstanding", 0)),
-            "emi": loan.get("emi"),
-            "rate": loan.get("rate"),
-            "created_at": now_iso(),
-        })
+            "emi": loan.get("emi"), "rate": loan.get("rate"),
+        }))
         counts["loans"] += 1
 
     for lab in parsed.get("lab_results", []) or []:
-        await db.lab_results.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.lab_results.insert_one(_base({
             "date": lab.get("date") or today_str(),
             "test": lab.get("test", "Unknown"),
             "value": float(lab.get("value", 0)),
-            "unit": lab.get("unit"),
-            "reference_range": lab.get("reference_range"),
-            "created_at": now_iso(),
-        })
+            "unit": lab.get("unit"), "reference_range": lab.get("reference_range"),
+        }))
         counts["lab_results"] += 1
 
     for pres in parsed.get("prescriptions", []) or []:
-        await db.prescriptions.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.prescriptions.insert_one(_base({
             "date": pres.get("date") or today_str(),
             "doctor": pres.get("doctor"),
             "medications": pres.get("medications", []),
             "notes": pres.get("notes"),
-            "created_at": now_iso(),
-        })
+        }))
         counts["prescriptions"] += 1
 
     for v in parsed.get("vitals", []) or []:
-        await db.vitals.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.vitals.insert_one(_base({
             "date": v.get("date") or today_str(),
             "kind": v.get("kind", "other"),
-            "value": str(v.get("value", "")),
-            "unit": v.get("unit"),
-            "created_at": now_iso(),
-        })
+            "value": str(v.get("value", "")), "unit": v.get("unit"),
+        }))
         counts["vitals"] += 1
 
+    for tr in parsed.get("trips", []) or []:
+        await db.trips.insert_one(_base({
+            "name": tr.get("name", "Trip"),
+            "destination": tr.get("destination", ""),
+            "start_date": tr.get("start_date"), "end_date": tr.get("end_date"),
+            "budget": tr.get("budget"), "notes": tr.get("notes"),
+        }))
+        counts["trips"] += 1
+
+    for ev in parsed.get("career_events", []) or []:
+        await db.career_events.insert_one(_base({
+            "date": ev.get("date") or today_str(),
+            "kind": ev.get("kind", "achievement"),
+            "title": ev.get("title", ""), "company": ev.get("company"),
+            "ctc": ev.get("ctc"), "notes": ev.get("notes"),
+        }))
+        counts["career_events"] += 1
+
     for g in parsed.get("generic_entries", []) or []:
-        await db.generic_entries.insert_one({
-            "id": new_id(), "user_id": user_id, "member_id": member_id,
+        await db.generic_entries.insert_one(_base({
             "category": g.get("category", "note"),
             "title": g.get("title", "Note"),
             "data": g.get("data", {}),
-            "created_at": now_iso(),
-        })
+        }))
         counts["generic_entries"] += 1
 
     return counts
@@ -354,20 +361,7 @@ async def inbox_file(
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     content_type = file.content_type or guess_mime(filename)
 
-    # Extract text
-    if ext == "pdf":
-        try:
-            text = _extract_pdf_text(data)
-        except Exception as e:
-            logger.error(f"PDF parse error: {e}")
-            text = ""
-    elif ext in ("txt", "csv", "json", "md"):
-        text = data.decode("utf-8", errors="ignore")
-    else:
-        # For images and unknown types - still upload but use filename as hint
-        text = f"[File uploaded: {filename}. Type: {content_type}. No automatic text extraction available — store as document reference only.]"
-
-    # Upload file to object storage
+    # Upload file to object storage FIRST so we have document_id for linking
     storage_path = f"{APP_NAME}/uploads/{user_id}/{new_id()}.{ext or 'bin'}"
     try:
         put_object(storage_path, data, content_type)
@@ -383,14 +377,31 @@ async def inbox_file(
         "is_deleted": False, "created_at": now_iso(),
     })
 
-    counts = {}
+    # Parse based on type
+    members = await db.members.find({"user_id": user_id}, {"_id": 0, "name": 1}).to_list(50)
+    member_names = [m["name"] for m in members]
     parsed = {"summary": f"Uploaded {filename}", "module": "generic", "confidence": 0.0}
-    if text and text.strip() and ext in ("pdf", "txt", "csv", "json", "md"):
-        members = await db.members.find({"user_id": user_id}, {"_id": 0, "name": 1}).to_list(50)
-        parsed = await parse_universal(text, today_str(), [m["name"] for m in members])
-        counts = await _apply_parsed(user_id, parsed, member_id)
-        # Link document to entries created (simple log)
-        await db.documents.update_one({"id": doc_id}, {"$set": {"parsed_summary": parsed.get("summary"), "counts": counts}})
+    counts = {}
+
+    try:
+        if ext == "pdf":
+            text = _extract_pdf_text(data)
+            if text.strip():
+                parsed = await parse_universal(text, today_str(), member_names)
+        elif ext in ("txt", "csv", "json", "md"):
+            text = data.decode("utf-8", errors="ignore")
+            parsed = await parse_universal(text, today_str(), member_names)
+        elif content_type.startswith("image/") or ext in ("jpg", "jpeg", "png", "webp", "gif"):
+            parsed = await parse_image_file(data, content_type, today_str(), member_names)
+    except Exception as e:
+        logger.error(f"Parse error for {filename}: {e}")
+
+    if parsed.get("confidence", 0) > 0 or parsed.get("module") != "generic":
+        counts = await _apply_parsed(user_id, parsed, member_id, document_id=doc_id)
+
+    await db.documents.update_one({"id": doc_id}, {"$set": {
+        "parsed_summary": parsed.get("summary"), "counts": counts
+    }})
 
     await db.inbox_log.insert_one({
         "id": new_id(), "user_id": user_id, "kind": "file",
@@ -704,6 +715,271 @@ async def dashboard_overview(member_id: Optional[str] = None, user_id: str = Dep
         "summary": summary, "members": members, "fire": fire, "goals": goals,
         "recent_inbox": recent_inbox, "recent_labs": recent_labs, "recent_meds": recent_meds,
     }
+
+
+# ---------------- Inline edits (PATCH) ----------------
+PATCH_COLLECTIONS = {
+    "transactions": db.transactions,
+    "investments": db.investments,
+    "loans": db.loans,
+    "labs": db.lab_results,
+    "vitals": db.vitals,
+    "prescriptions": db.prescriptions,
+    "trips": db.trips,
+    "career-events": db.career_events,
+}
+
+
+@api.patch("/{kind}/{rid}")
+async def patch_record(kind: str, rid: str, body: dict, user_id: str = Depends(get_current_user_id)):
+    coll = PATCH_COLLECTIONS.get(kind)
+    if coll is None:
+        raise HTTPException(status_code=404, detail="Unknown kind")
+    body.pop("id", None)
+    body.pop("user_id", None)
+    body.pop("_id", None)
+    # Coerce known numeric fields
+    for k in ("amount", "outstanding", "emi", "rate", "units", "current_value", "invested_value", "value", "budget", "ctc"):
+        if k in body and body[k] not in (None, ""):
+            try:
+                body[k] = float(body[k])
+            except Exception:
+                pass
+    await coll.update_one({"id": rid, "user_id": user_id}, {"$set": body})
+    item = await coll.find_one({"id": rid}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+    return item
+
+
+# ---------------- Travel ----------------
+class TripIn(BaseModel):
+    member_id: str
+    name: str
+    destination: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    budget: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@api.get("/travel/trips")
+async def list_trips(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    return await db.trips.find(_filter_member(user_id, member_id), {"_id": 0}).sort("start_date", -1).to_list(500)
+
+
+@api.post("/travel/trips")
+async def create_trip(body: TripIn, user_id: str = Depends(get_current_user_id)):
+    doc = {"id": new_id(), "user_id": user_id, **body.model_dump(), "created_at": now_iso()}
+    await db.trips.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/travel/trips/{tid}")
+async def delete_trip(tid: str, user_id: str = Depends(get_current_user_id)):
+    await db.trips.delete_one({"id": tid, "user_id": user_id})
+    await db.transactions.update_many({"trip_id": tid, "user_id": user_id}, {"$unset": {"trip_id": ""}})
+    return {"ok": True}
+
+
+@api.get("/travel/trips/{tid}/summary")
+async def trip_summary(tid: str, user_id: str = Depends(get_current_user_id)):
+    trip = await db.trips.find_one({"id": tid, "user_id": user_id}, {"_id": 0})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    txs = await db.transactions.find({"trip_id": tid, "user_id": user_id}, {"_id": 0}).to_list(1000)
+    spend = sum(t["amount"] for t in txs if t["type"] == "expense")
+    by_cat = {}
+    for t in txs:
+        if t["type"] == "expense":
+            by_cat[t["category"]] = by_cat.get(t["category"], 0) + t["amount"]
+    return {"trip": trip, "spend": spend, "transactions": txs, "by_category": by_cat,
+            "budget_used_pct": round(spend / trip["budget"] * 100, 1) if trip.get("budget") else None}
+
+
+# ---------------- Career ----------------
+class CareerRoleIn(BaseModel):
+    member_id: str
+    company: str
+    title: str
+    start_date: str
+    end_date: Optional[str] = None
+    ctc: Optional[float] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CareerEventIn(BaseModel):
+    member_id: str
+    date: str
+    kind: str
+    title: str
+    company: Optional[str] = None
+    ctc: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class CareerSkillIn(BaseModel):
+    member_id: str
+    name: str
+    level: int = 3
+    category: Optional[str] = None
+
+
+@api.get("/career/roles")
+async def list_roles(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    return await db.career_roles.find(_filter_member(user_id, member_id), {"_id": 0}).sort("start_date", -1).to_list(200)
+
+
+@api.post("/career/roles")
+async def create_role(body: CareerRoleIn, user_id: str = Depends(get_current_user_id)):
+    doc = {"id": new_id(), "user_id": user_id, **body.model_dump(), "created_at": now_iso()}
+    await db.career_roles.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/career/roles/{rid}")
+async def delete_role(rid: str, user_id: str = Depends(get_current_user_id)):
+    await db.career_roles.delete_one({"id": rid, "user_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/career/events")
+async def list_events(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    return await db.career_events.find(_filter_member(user_id, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+
+
+@api.post("/career/events")
+async def create_event(body: CareerEventIn, user_id: str = Depends(get_current_user_id)):
+    doc = {"id": new_id(), "user_id": user_id, **body.model_dump(), "created_at": now_iso()}
+    await db.career_events.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/career/events/{eid}")
+async def delete_event(eid: str, user_id: str = Depends(get_current_user_id)):
+    await db.career_events.delete_one({"id": eid, "user_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/career/skills")
+async def list_skills(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    return await db.career_skills.find(_filter_member(user_id, member_id), {"_id": 0}).to_list(500)
+
+
+@api.post("/career/skills")
+async def create_skill(body: CareerSkillIn, user_id: str = Depends(get_current_user_id)):
+    doc = {"id": new_id(), "user_id": user_id, **body.model_dump(), "created_at": now_iso()}
+    await db.career_skills.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/career/skills/{sid}")
+async def delete_skill(sid: str, user_id: str = Depends(get_current_user_id)):
+    await db.career_skills.delete_one({"id": sid, "user_id": user_id})
+    return {"ok": True}
+
+
+# ---------------- Document records (linked rows) ----------------
+@api.get("/documents/{doc_id}/records")
+async def document_records(doc_id: str, user_id: str = Depends(get_current_user_id)):
+    out = {}
+    for name, coll in [("transactions", db.transactions), ("investments", db.investments),
+                       ("loans", db.loans), ("lab_results", db.lab_results),
+                       ("prescriptions", db.prescriptions), ("vitals", db.vitals),
+                       ("trips", db.trips), ("career_events", db.career_events)]:
+        items = await coll.find({"user_id": user_id, "origin_document_id": doc_id}, {"_id": 0}).to_list(200)
+        if items:
+            out[name] = items
+    return out
+
+
+# ---------------- CSV Export ----------------
+import csv as csv_module
+from io import StringIO
+
+
+def _to_csv(rows: list[dict]) -> str:
+    if not rows:
+        return ""
+    keys = sorted({k for r in rows for k in r.keys()})
+    buf = StringIO()
+    w = csv_module.DictWriter(buf, fieldnames=keys)
+    w.writeheader()
+    for r in rows:
+        w.writerow({k: (json.dumps(r.get(k)) if isinstance(r.get(k), (dict, list)) else r.get(k)) for k in keys})
+    return buf.getvalue()
+
+
+CSV_KINDS = {
+    "transactions": db.transactions, "investments": db.investments, "loans": db.loans,
+    "lab_results": db.lab_results, "vitals": db.vitals, "prescriptions": db.prescriptions,
+    "trips": db.trips, "career_events": db.career_events, "goals": db.goals,
+}
+
+
+@api.get("/export/{kind}.csv")
+async def export_csv(kind: str, authorization: str = Header(None), auth: str = Query(None)):
+    auth_header = authorization or (f"Bearer {auth}" if auth else None)
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="auth required")
+    user_id = decode_token(auth_header.replace("Bearer ", ""))
+    coll = CSV_KINDS.get(kind)
+    if coll is None:
+        raise HTTPException(status_code=404, detail="Unknown export kind")
+    rows = await coll.find({"user_id": user_id}, {"_id": 0}).to_list(20000)
+    body = _to_csv(rows)
+    return Response(content=body, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{kind}.csv"'})
+
+
+import json  # ensure available
+
+
+# ---------------- Net-worth snapshot + XIRR ----------------
+@api.post("/finance/snapshot")
+async def take_snapshot(user_id: str = Depends(get_current_user_id)):
+    summary = await finance_summary(None, user_id)  # type: ignore
+    snap = {
+        "id": new_id(), "user_id": user_id, "date": today_str(),
+        "net_worth": summary["net_worth"], "invest_value": summary["invest_value"],
+        "debt": summary["debt"], "created_at": now_iso(),
+    }
+    await db.net_worth_snapshots.replace_one(
+        {"user_id": user_id, "date": snap["date"]}, snap, upsert=True
+    )
+    return snap
+
+
+@api.get("/finance/net-worth-series")
+async def net_worth_series(user_id: str = Depends(get_current_user_id)):
+    items = await db.net_worth_snapshots.find({"user_id": user_id}, {"_id": 0}).sort("date", 1).to_list(1000)
+    return items
+
+
+@api.get("/finance/investments/xirr")
+async def investments_xirr(user_id: str = Depends(get_current_user_id)):
+    # Simple absolute return per investment (true XIRR needs cashflow dates per buy lot).
+    inv = await db.investments.find({"user_id": user_id}, {"_id": 0}).to_list(500)
+    out = []
+    total_invested = 0
+    total_current = 0
+    for i in inv:
+        cur = i.get("current_value") or 0
+        inv_v = i.get("invested_value") or 0
+        gain = cur - inv_v
+        pct = (gain / inv_v * 100) if inv_v > 0 else None
+        out.append({"id": i["id"], "name": i["name"], "kind": i["kind"],
+                    "invested": inv_v, "current": cur, "gain": gain, "return_pct": pct})
+        total_invested += inv_v
+        total_current += cur
+    overall = (total_current - total_invested) / total_invested * 100 if total_invested > 0 else None
+    return {"items": out, "total_invested": total_invested, "total_current": total_current,
+            "total_gain": total_current - total_invested, "overall_pct": overall}
 
 
 # ---------------- Mount + middleware ----------------

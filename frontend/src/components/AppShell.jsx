@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { LayoutDashboard, Wallet, HeartPulse, Target, FileText, Users, LogOut, Sparkles, Inbox } from "lucide-react";
+import { LayoutDashboard, Wallet, HeartPulse, Target, FileText, Users, LogOut, Sparkles, Inbox, Plane, Briefcase } from "lucide-react";
 import UniversalInbox from "@/components/UniversalInbox";
 import FamilySwitcher from "@/components/FamilySwitcher";
 import { useState } from "react";
@@ -9,6 +9,8 @@ const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, testid: "nav-overview" },
   { to: "/finance", label: "Finance", icon: Wallet, testid: "nav-finance" },
   { to: "/health", label: "Health", icon: HeartPulse, testid: "nav-health" },
+  { to: "/travel", label: "Travel", icon: Plane, testid: "nav-travel" },
+  { to: "/career", label: "Career", icon: Briefcase, testid: "nav-career" },
   { to: "/goals", label: "Goals & FIRE", icon: Target, testid: "nav-goals" },
   { to: "/documents", label: "Documents", icon: FileText, testid: "nav-documents" },
   { to: "/family", label: "Family", icon: Users, testid: "nav-family" },

@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Plus, Trash2, TrendingUp, TrendingDown, Building2, LineChart } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, Building2, LineChart, Edit3, Download } from "lucide-react";
 import { toast } from "sonner";
+import { API } from "@/lib/api";
 
 const Section = ({ title, children, action }) => (
   <div className="card-surface p-5 md:p-6">
@@ -23,6 +24,7 @@ export default function Finance() {
   const [summary, setSummary] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({});
+  const [editingId, setEditingId] = useState(null);
 
   const memberParam = activeMember === "family" ? "" : `?member_id=${activeMember}`;
 
@@ -44,7 +46,12 @@ export default function Finance() {
     e.preventDefault();
     try {
       const body = { ...form, member_id: form.member_id || defaultMemberId };
-      if (tab === "transactions") {
+      const kindMap = { transactions: "transactions", investments: "investments", loans: "loans" };
+      if (editingId) {
+        const patchBody = { ...body };
+        if (tab === "transactions" && patchBody.amount) patchBody.amount = Number(patchBody.amount);
+        await api.patch(`/${kindMap[tab]}/${editingId}`, patchBody);
+      } else if (tab === "transactions") {
         await api.post("/finance/transactions", {
           ...body, amount: Number(body.amount), date: body.date || new Date().toISOString().slice(0, 10),
           type: body.type || "expense", category: body.category || "other",
@@ -61,10 +68,22 @@ export default function Finance() {
           emi: body.emi ? Number(body.emi) : null, rate: body.rate ? Number(body.rate) : null,
         });
       }
-      setShowAdd(false); setForm({});
+      setShowAdd(false); setForm({}); setEditingId(null);
       await refresh();
-      toast.success("Added");
-    } catch (e) { toast.error("Add failed"); }
+      toast.success(editingId ? "Updated" : "Added");
+    } catch { toast.error("Save failed"); }
+  };
+
+  const startEdit = (row) => {
+    setEditingId(row.id);
+    setForm(row);
+    setShowAdd(true);
+  };
+
+  const downloadCsv = () => {
+    const map = { transactions: "transactions", investments: "investments", loans: "loans" };
+    const token = localStorage.getItem("flos_token");
+    window.open(`${API}/export/${map[tab]}.csv?auth=${encodeURIComponent(token)}`, "_blank");
   };
 
   const remove = async (kind, id) => {
@@ -122,11 +141,18 @@ export default function Finance() {
           </button>
         ))}
         <button
-          onClick={() => { setShowAdd(true); setForm({}); }}
+          onClick={() => { setShowAdd(true); setForm({}); setEditingId(null); }}
           data-testid="finance-add-button"
           className="ml-auto px-4 py-2 rounded-full text-sm font-medium bg-[#D19B4C] hover:bg-[#c18e3f] text-[#111812] flex items-center gap-1.5 transition"
         >
           <Plus className="h-4 w-4" /> Add manually
+        </button>
+        <button
+          onClick={downloadCsv}
+          data-testid="finance-export-csv"
+          className="px-4 py-2 rounded-full text-sm font-medium bg-white border border-[#E5E2DC] text-[#5E6A62] hover:border-[#184A31] flex items-center gap-1.5"
+        >
+          <Download className="h-4 w-4" /> Export CSV
         </button>
       </div>
 
@@ -145,6 +171,7 @@ export default function Finance() {
               { k: "amount", label: "Amount", render: (v) => formatINRFull(v), align: "right" },
             ]}
             onDelete={(r) => remove("transactions", r.id)}
+            onEdit={startEdit}
             testidPrefix="finance-tx"
             empty="No transactions yet. Use the Universal Inbox to capture spends instantly."
           />
@@ -161,6 +188,7 @@ export default function Finance() {
               { k: "member_id", label: "Member", render: (v) => memberName(v) },
             ]}
             onDelete={(r) => remove("investments", r.id)}
+            onEdit={startEdit}
             testidPrefix="finance-inv"
             empty="No investments. Snap a screenshot of your MF holdings to add via Inbox."
           />
@@ -176,6 +204,7 @@ export default function Finance() {
               { k: "member_id", label: "Member", render: (v) => memberName(v) },
             ]}
             onDelete={(r) => remove("loans", r.id)}
+            onEdit={startEdit}
             testidPrefix="finance-loan"
             empty="No loans tracked. Add manually or paste a loan statement."
           />
@@ -183,7 +212,7 @@ export default function Finance() {
       </Section>
 
       {showAdd && (
-        <Modal title={`Add ${tab.slice(0, -1)}`} onClose={() => setShowAdd(false)}>
+        <Modal title={editingId ? `Edit ${tab.slice(0, -1)}` : `Add ${tab.slice(0, -1)}`} onClose={() => { setShowAdd(false); setEditingId(null); }}>
           <form onSubmit={submitAdd} className="space-y-3" data-testid="finance-add-form">
             <SelectMember value={form.member_id || defaultMemberId} onChange={(v) => setForm({ ...form, member_id: v })} members={members} />
             {tab === "transactions" && (
@@ -222,7 +251,7 @@ export default function Finance() {
   );
 }
 
-function Table({ rows, cols, onDelete, testidPrefix, empty }) {
+function Table({ rows, cols, onDelete, onEdit, testidPrefix, empty }) {
   if (rows.length === 0) return <div className="text-sm text-[#5E6A62] py-4">{empty}</div>;
   return (
     <div className="overflow-x-auto -mx-5 md:-mx-6">
@@ -241,7 +270,12 @@ function Table({ rows, cols, onDelete, testidPrefix, empty }) {
                   {c.render ? c.render(r[c.k]) : (r[c.k] ?? "—")}
                 </td>
               ))}
-              <td className="px-3 py-3">
+              <td className="px-2 py-3 whitespace-nowrap">
+                {onEdit && (
+                  <button onClick={() => onEdit(r)} className="text-[#5E6A62] hover:text-[#184A31] opacity-50 hover:opacity-100 mr-2" data-testid={`${testidPrefix}-edit`}>
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button onClick={() => onDelete(r)} className="text-[#C25942] opacity-50 hover:opacity-100" data-testid={`${testidPrefix}-delete`}>
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
