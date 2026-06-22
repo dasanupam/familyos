@@ -245,7 +245,8 @@ async def _apply_parsed(user_id: str, parsed: dict, default_member_id: Optional[
     member_id = await _resolve_member(user_id, member_hint, default_member_id)
     counts = {"transactions": 0, "investments": 0, "loans": 0,
               "lab_results": 0, "prescriptions": 0, "vitals": 0,
-              "trips": 0, "career_events": 0, "generic_entries": 0}
+              "trips": 0, "career_events": 0, "goals": 0, "supplements": 0,
+              "generic_entries": 0}
 
     def _base(extra: dict) -> dict:
         b = {"id": new_id(), "user_id": user_id, "member_id": member_id,
@@ -324,6 +325,36 @@ async def _apply_parsed(user_id: str, parsed: dict, default_member_id: Optional[
         }))
         counts["career_events"] += 1
 
+    for goal in parsed.get("goals", []) or []:
+        # Upsert by name + user_id — re-uploading a plan updates instead of duplicates
+        existing = await db.goals.find_one({"user_id": user_id, "name": goal.get("name")})
+        upd = {
+            "target_amount": float(goal.get("target_amount") or 0),
+            "current_amount": float(goal.get("current_amount") or (existing or {}).get("current_amount") or 0),
+            "target_date": goal.get("target_date"),
+            "category": goal.get("category", "general"),
+            "origin_document_id": document_id,
+        }
+        if existing:
+            await db.goals.update_one({"id": existing["id"]}, {"$set": upd})
+        else:
+            await db.goals.insert_one(_base({"name": goal.get("name", "Goal"), **upd}))
+        counts["goals"] += 1
+
+    for sup in parsed.get("supplements", []) or []:
+        existing = await db.supplements.find_one({"user_id": user_id, "member_id": member_id, "name": sup.get("name")})
+        upd = {
+            "dose": sup.get("dose", ""), "frequency": sup.get("frequency", ""),
+            "start_date": sup.get("start_date") or today_str(),
+            "end_date": sup.get("end_date"), "notes": sup.get("notes"),
+            "origin_document_id": document_id,
+        }
+        if existing:
+            await db.supplements.update_one({"id": existing["id"]}, {"$set": upd})
+        else:
+            await db.supplements.insert_one(_base({"name": sup.get("name", "Supplement"), **upd}))
+        counts["supplements"] += 1
+
     for g in parsed.get("generic_entries", []) or []:
         await db.generic_entries.insert_one(_base({
             "category": g.get("category", "note"),
@@ -333,6 +364,58 @@ async def _apply_parsed(user_id: str, parsed: dict, default_member_id: Optional[
         counts["generic_entries"] += 1
 
     return counts
+
+
+# ---------------- Supplements + Active Medications ----------------
+class SupplementIn(BaseModel):
+    member_id: str
+    name: str
+    dose: str = ""
+    frequency: str = ""
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@api.get("/health/supplements")
+async def list_supplements(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    return await db.supplements.find(_filter_member(user_id, member_id), {"_id": 0}).sort("start_date", -1).to_list(500)
+
+
+@api.post("/health/supplements")
+async def create_supplement(body: SupplementIn, user_id: str = Depends(get_current_user_id)):
+    doc = {"id": new_id(), "user_id": user_id, **body.model_dump(), "created_at": now_iso()}
+    await db.supplements.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/health/supplements/{sid}")
+async def delete_supplement(sid: str, user_id: str = Depends(get_current_user_id)):
+    await db.supplements.delete_one({"id": sid, "user_id": user_id})
+    return {"ok": True}
+
+
+@api.get("/health/active-medications")
+async def active_medications(member_id: Optional[str] = None, user_id: str = Depends(get_current_user_id)):
+    """Roll up all prescriptions into a dedup'd 'currently active' list keyed by medication name."""
+    pres = await db.prescriptions.find(_filter_member(user_id, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+    active = {}  # name -> latest entry
+    for p in pres:
+        for m in p.get("medications", []) or []:
+            nm = (m.get("name") or "").strip()
+            if not nm:
+                continue
+            if nm not in active or p["date"] > active[nm]["last_seen"]:
+                active[nm] = {
+                    "name": nm, "dose": m.get("dose"), "frequency": m.get("frequency"),
+                    "duration": m.get("duration"), "doctor": p.get("doctor"),
+                    "last_seen": p["date"], "first_seen": p["date"],
+                    "prescription_id": p["id"], "member_id": p["member_id"],
+                }
+            else:
+                active[nm]["first_seen"] = min(active[nm]["first_seen"], p["date"])
+    return list(active.values())
 
 
 @api.post("/inbox/text")

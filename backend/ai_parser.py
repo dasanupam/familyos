@@ -63,6 +63,14 @@ Output schema (strict JSON, no prose, no markdown fences):
      {"date": "YYYY-MM-DD", "kind": "promotion"|"new_role"|"certification"|"achievement"|"review"|"raise",
       "title": "<string>", "company": "<string|null>", "ctc": <number|null>, "notes": "<string|null>"}
   ],
+  "goals": [
+     {"name": "<string>", "target_amount": <number>, "current_amount": <number|null>,
+      "target_date": "YYYY-MM-DD|null", "category": "<car|home|retirement|care|education|other>"}
+  ],
+  "supplements": [
+     {"name": "<string>", "dose": "<string>", "frequency": "<string>",
+      "start_date": "YYYY-MM-DD|null", "end_date": "YYYY-MM-DD|null", "notes": "<string|null>"}
+  ],
   "generic_entries": [
      {"category": "<short tag>", "title": "<string>", "data": { ... }}
   ],
@@ -78,6 +86,7 @@ Rules:
 - For offer/appointment letters, create a career_event with kind='new_role'.
 - For certificates, kind='certification'.
 - If you cannot map to any structured module, put it in generic_entries.
+- For "financial plan" / "retirement plan" / "supplement plan" type docs, populate goals[] and/or supplements[] with the items the plan defines. Use clear unique names so re-uploads can upsert.
 - Output ONLY valid JSON, no commentary.
 """
 
