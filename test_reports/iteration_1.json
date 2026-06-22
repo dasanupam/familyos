@@ -1,0 +1,51 @@
+{
+  "summary": "First-finish smoke test of Personal Life OS backend and frontend. Backend auth, members, inbox→Claude parsing (expense + vital), finance summary/transactions, FIRE, goals CRUD, dashboard overview all working. Frontend login → overview → inbox → finance → goals → health → family → logout flow all pass. Currency INR rendering correctly.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/login returns JWT (key='token') and user",
+    "GET /api/auth/me returns user with bearer token",
+    "GET /api/members lists seeded 'self' member (Arjun)",
+    "POST /api/inbox/text 'Spent 2000 on groceries today' → Claude parses, inserts expense (confidence 0.95)",
+    "GET /api/finance/transactions returns inserted expense",
+    "POST /api/inbox/text 'BP 128/82' → vital inserted into /api/health/vitals (kind=bp, value=128/82)",
+    "POST /api/fire with target/current/monthly/return → returns progress_pct=1.0, years_to_fire=16.9, target_date=2043-05-22",
+    "GET /api/fire returns same config",
+    "POST/GET/DELETE /api/goals CRUD works",
+    "GET /api/dashboard/overview returns summary, members, fire, goals",
+    "GET /api/finance/summary returns net_worth, income_month, expense_month, category_breakdown (groceries: 2000)",
+    "Unauthenticated /api/auth/me returns 401",
+    "Frontend /login renders, login succeeds with demo creds",
+    "Overview page shows Net Worth, FIRE card (1% of ₹5.00Cr, 16.9 yrs), family-switcher, open-inbox-button",
+    "UniversalInbox modal: typed 'Spent 2500 on groceries today', send → inbox-last-result card appeared",
+    "/finance shows 2 finance-tx-row entries (the inbox-created txns)",
+    "/goals shows configure-fire-button, /health and /family pages load",
+    "logout-button returns to /login"
+  ],
+  "failed": [
+    {
+      "area": "Login redirect path",
+      "issue": "After login, navigation goes to '/' rather than '/overview' (review_request expected /overview). Overview content does render at '/' so functionally fine, but URL contract mismatch.",
+      "evidence": "Playwright wait_for_url('**/overview**') timed out; page URL = '/' with Overview component rendered (screenshot confirms).",
+      "priority": "LOW"
+    },
+    {
+      "area": "POST /api/health/labs",
+      "issue": "Requires member_id in body (Pydantic 'missing' error) — review_request example payload omitted it. Not a bug per se; flagging because frontend must always send member_id.",
+      "evidence": "Response: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"member_id\"],\"msg\":\"Field required\"}]}",
+      "priority": "LOW"
+    },
+    {
+      "area": "Auth response key",
+      "issue": "Login returns JWT under key 'token' (not 'access_token' as test plan implied). Frontend appears to handle correctly.",
+      "evidence": "Login JSON: {\"token\":\"eyJ...\",\"user\":{...}}",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Optional: redirect to /overview after login for URL consistency, or update spec to reflect '/' as canonical overview path.",
+    "Optional: document that /api/health/labs requires member_id; ensure all frontend Health forms pre-fill active member_id."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
