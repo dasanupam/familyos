@@ -1,6 +1,24 @@
 import { useEffect, useState } from "react";
 import { api, API } from "@/lib/api";
-import { FileText, Download, Trash2 } from "lucide-react";
+import { FileText, Download, Trash2, Link2 } from "lucide-react";
+
+function LinkedRecords({ docId }) {
+  const [records, setRecords] = useState(null);
+  useEffect(() => { api.get(`/documents/${docId}/records`).then((r) => setRecords(r.data)).catch(() => setRecords({})); }, [docId]);
+  if (!records) return null;
+  const entries = Object.entries(records);
+  if (entries.length === 0) return null;
+  const total = entries.reduce((a, [, v]) => a + v.length, 0);
+  return (
+    <div className="mt-3 text-xs text-[#367A50] flex flex-wrap gap-1.5" data-testid="linked-records">
+      <Link2 className="h-3 w-3 mt-0.5" />
+      <span className="font-medium">{total} linked records:</span>
+      {entries.map(([k, v]) => (
+        <span key={k} className="bg-[#F2F0E9] border border-[#E5E2DC] rounded px-1.5 py-0.5">{k.replace("_", " ")}: {v.length}</span>
+      ))}
+    </div>
+  );
+}
 
 export default function Documents() {
   const [docs, setDocs] = useState([]);
@@ -44,6 +62,7 @@ export default function Documents() {
                   {d.parsed_summary && (
                     <div className="text-xs text-[#367A50] mt-2 line-clamp-2">{d.parsed_summary}</div>
                   )}
+                  <LinkedRecords docId={d.id} />
                 </div>
               </div>
               <div className="flex gap-2 mt-4">

@@ -22,7 +22,12 @@ export default function Overview() {
     const m = activeMember === "family" ? "" : `?member_id=${activeMember}`;
     api.get(`/dashboard/overview${m}`).then((r) => setData(r.data)).catch(() => {});
     api.get(`/finance/monthly-trend${m}`).then((r) => setTrend(r.data)).catch(() => {});
+    // Auto-snapshot net-worth on every dashboard load (idempotent per day)
+    api.post("/finance/snapshot").catch(() => {});
+    api.get("/finance/net-worth-series").then((r) => setNwSeries(r.data)).catch(() => {});
   }, [activeMember]);
+
+  const [nwSeries, setNwSeries] = useState([]);
 
   if (!data) return <div className="text-[#5E6A62]">Loading…</div>;
 
@@ -188,6 +193,31 @@ export default function Overview() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="card-surface p-6" data-testid="net-worth-series-card">
+        <div className="label-eyebrow mb-3">Net worth over time</div>
+        {nwSeries.length < 2 ? (
+          <div className="text-sm text-[#5E6A62]">A new snapshot is captured every time you open this page. Check back tomorrow to see your first trend line.</div>
+        ) : (
+          <div style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={nwSeries}>
+                <defs>
+                  <linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#367A50" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#367A50" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#E5E2DC" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: "#5E6A62", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={formatINR} tick={{ fill: "#5E6A62", fontSize: 11 }} axisLine={false} tickLine={false} width={60} />
+                <Tooltip formatter={(v) => formatINRFull(v)} />
+                <Area type="monotone" dataKey="net_worth" stroke="#367A50" strokeWidth={2} fill="url(#nwg)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div className="card-surface p-6" data-testid="recent-inbox">

@@ -7,6 +7,7 @@ import { useState } from "react";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, testid: "nav-overview" },
+  { to: "/household", label: "Household", icon: Users, testid: "nav-household" },
   { to: "/finance", label: "Finance", icon: Wallet, testid: "nav-finance" },
   { to: "/health", label: "Health", icon: HeartPulse, testid: "nav-health" },
   { to: "/travel", label: "Travel", icon: Plane, testid: "nav-travel" },

@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Plus, Trash2, Pill, FlaskConical, Activity } from "lucide-react";
 import { Modal, Field, SelectMember } from "@/pages/Finance";
+import ExportCsvButton from "@/components/ExportCsvButton";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 
@@ -86,6 +87,7 @@ export default function Health() {
         >
           <Plus className="h-4 w-4" /> Add manually
         </button>
+        <ExportCsvButton kind={tab === "labs" ? "lab_results" : tab} />
       </div>
 
       {tab === "vitals" && (

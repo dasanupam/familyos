@@ -3,6 +3,7 @@ import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Plus, Trash2, Briefcase, Award, TrendingUp, Zap } from "lucide-react";
 import { Modal, Field, SelectMember } from "@/pages/Finance";
+import ExportCsvButton from "@/components/ExportCsvButton";
 import { toast } from "sonner";
 
 const EVENT_KINDS = [
@@ -83,6 +84,7 @@ export default function Career() {
           className="ml-auto px-4 py-2 rounded-full text-sm font-medium bg-[#D19B4C] hover:bg-[#c18e3f] text-[#111812] flex items-center gap-1.5">
           <Plus className="h-4 w-4" /> Add
         </button>
+        <ExportCsvButton kind={tab === "timeline" ? "career_events" : tab === "roles" ? "trips" : "career_events"} label={tab === "roles" ? "Export events" : "Export CSV"} />
       </div>
 
       {tab === "timeline" && (

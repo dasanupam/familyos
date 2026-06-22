@@ -3,6 +3,7 @@ import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Plus, Trash2, Plane, MapPin, Calendar } from "lucide-react";
 import { Modal, Field, SelectMember } from "@/pages/Finance";
+import ExportCsvButton from "@/components/ExportCsvButton";
 import { toast } from "sonner";
 
 export default function Travel() {
@@ -39,6 +40,7 @@ export default function Travel() {
           className="bg-[#D19B4C] hover:bg-[#c18e3f] text-[#111812] text-sm font-medium px-4 py-2 rounded-full flex items-center gap-1.5">
           <Plus className="h-4 w-4" /> New trip
         </button>
+        <ExportCsvButton kind="trips" />
       </div>
 
       {trips.length === 0 && (
