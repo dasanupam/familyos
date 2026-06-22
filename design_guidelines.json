@@ -1,0 +1,81 @@
+{
+  "project_name": "Family Life OS",
+  "theme": "light",
+  "archetype": "Organic & Earthy (Archetype 1)",
+  "vibe": "Premium command center, grounded, trustworthy, modern, confident",
+  "colors": {
+    "background": "#F2F0E9",
+    "surface": "#FFFFFF",
+    "primary": "#184A31",
+    "primary_hover": "#113523",
+    "secondary": "#C25942",
+    "accent": "#D19B4C",
+    "success": "#367A50",
+    "text_primary": "#111812",
+    "text_secondary": "#5E6A62",
+    "border": "#E5E2DC"
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "h1": "text-4xl sm:text-5xl font-medium tracking-tight text-[#111812]",
+    "h2": "text-2xl sm:text-3xl font-medium tracking-tight text-[#111812]",
+    "h3": "text-xl sm:text-2xl font-medium text-[#111812]",
+    "h4": "text-lg sm:text-xl font-medium text-[#111812]",
+    "body": "text-base text-[#5E6A62] leading-relaxed",
+    "label": "text-xs font-bold tracking-[0.1em] uppercase text-[#5E6A62]"
+  },
+  "spacing": {
+    "global_padding": "p-4 md:p-8 lg:p-12",
+    "card_padding": "p-6 md:p-8",
+    "grid_gap": "gap-4 md:gap-6",
+    "section_gap": "gap-12 md:gap-16"
+  },
+  "layout": {
+    "strategy": "The Control Room Grid (Dashboard focus)",
+    "grid_columns": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+    "surface_style": "Flat Solid Surfaces with crisp edges",
+    "border_radius": "rounded-2xl"
+  },
+  "components": {
+    "cards": "Flat white background, 1px solid border (#E5E2DC), no heavy shadows, subtle hover lift (-translate-y-1) and shadow-lg.",
+    "buttons": "Primary: Solid #184A31 background, text-white, rounded-full, px-6 py-2.5, font-medium, hover:bg-[#113523].",
+    "universal_inbox": "A prominent floating command bar or fixed top-header input. Highly visible, allowing users to drop text, links, or files effortlessly.",
+    "family_switcher": "A pill-shaped toggle or dropdown in the header displaying current active member's avatar and name.",
+    "charts": "Use Recharts. Avoid default grid lines (make them very subtle #E5E2DC). Use primary (#184A31) and secondary (#C25942) colors for lines/bars."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "guidelines": "Use stroke-width 1.5 for a sophisticated, lightweight appearance."
+  },
+  "images": {
+    "family_avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxzbWlsaW5nJTIwZGl2ZXJzZSUyMHBlcnNvbiUyMHBvcnRyYWl0fGVufDB8fHx8MTc4MjE1MzI5M3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Avatar for male partner"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1621624666561-84d0107001dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwyfHxzbWlsaW5nJTIwZGl2ZXJzZSUyMHBlcnNvbiUyMHBvcnRyYWl0fGVufDB8fHx8MTc4MjE1MzI5M3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Avatar for alternate family member"
+      }
+    ],
+    "abstract_background": {
+      "url": "https://images.unsplash.com/photo-1596486935250-3ca1fb5c45b8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMHdhcm0lMjBzYW5kJTIwdGV4dHVyZXxlbnwwfHx8fDE3ODIxNTMyODd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Warm sand texture to be used subtly in the background of login or zero-state screens"
+    }
+  },
+  "testing": {
+    "requirements": "All interactive and key informational elements MUST include a data-testid attribute formatted as kebab-case and role-based (e.g., data-testid='family-switcher-dropdown')."
+  },
+  "instructions_to_main_agent": [
+    "Implement a responsive dashboard using React and Tailwind CSS.",
+    "Do not use Inter or Roboto fonts. Apply Outfit for headings and Manrope for body text.",
+    "No purple, teal, or violet gradients. Stick strictly to the Organic & Earthy palette provided.",
+    "Currency must be formatted as INR (₹).",
+    "Build the Universal Inbox as the primary entry point for effortless data logging.",
+    "Create a modular architecture where 'Finance Dashboard', 'Health Dashboard', and future modules (like Fitness/Travel) reside.",
+    "Include a FIRE tracker widget showing progress and projected retirement date.",
+    "Always provide a Family Switcher that toggles context (individual vs. combined family view).",
+    "Use Shadcn UI components but heavily customize them to remove the 'default Vercel look'. Use flat solid designs rather than glassmorphism."
+  ]
+}
