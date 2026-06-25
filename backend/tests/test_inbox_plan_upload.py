@@ -126,7 +126,7 @@ class TestInboxFileDryRun:
         resp = requests.post(f"{BASE_URL}/api/inbox/file", files=files, data=data, headers=headers)
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         result = resp.json()
-        assert result.get("proposed") is True, f"Expected proposed=True, got: {result}"
+        assert result.get("proposed") == True, f"Expected proposed=True, got: {result}"
 
     def test_dry_run_returns_document_id(self, headers):
         """dry_run=true should store document and return document_id"""
@@ -158,7 +158,7 @@ class TestInboxFileDryRun:
         resp = requests.post(f"{BASE_URL}/api/inbox/file", files=files, data=data, headers=headers)
         assert resp.status_code == 200
         result = resp.json()
-        assert result.get("proposed") is True
+        assert result.get("proposed") == True
 
         # Wait a moment for any async operations
         time.sleep(1)
@@ -176,7 +176,7 @@ class TestInboxFileDryRun:
         data = {"dry_run": "true"}
         resp = requests.post(f"{BASE_URL}/api/inbox/file", files=files, data=data, headers=headers)
         assert resp.status_code == 200
-        assert resp.json().get("proposed") is True
+        assert resp.json().get("proposed") == True
 
         time.sleep(1)
 
@@ -216,7 +216,7 @@ class TestInboxFileNoDryRun:
         result = resp.json()
         # Should have counts key, NOT proposed
         assert "counts" in result or "document_id" in result, f"Expected counts in response: {result}"
-        assert result.get("proposed") is not True, "Should NOT return proposed=True without dry_run"
+        assert result.get("proposed") != True, "Should NOT return proposed=True without dry_run"
 
     def test_no_dry_run_returns_document_id(self, headers):
         """Without dry_run, file upload should still return document_id"""
