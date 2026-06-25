@@ -96,7 +96,7 @@ async def parse_universal(content: str, today_iso: str, member_names: list) -> d
 
 
 async def parse_image_file(data: bytes, mime_type: str, today_iso: str, member_names: list) -> dict:
-    """Parse an image (photo of prescription, lab report, receipt, etc.) via Gemini."""
+    """Parse an image (photo of prescription, lab report, receipt, etc.) via Gemini multimodal Vision."""
     ext = mime_type.split("/")[-1].replace("jpeg", "jpg") or "png"
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
         tmp.write(data)
@@ -104,9 +104,16 @@ async def parse_image_file(data: bytes, mime_type: str, today_iso: str, member_n
     try:
         user_prompt = (
             f"Today's date is {today_iso}. "
-            f"Known members: {', '.join(member_names) or 'none'}. "
-            "Read this image (could be a prescription, lab report, receipt, ticket, certificate, etc.) "
-            "and return strict JSON per the schema."
+            f"Known family members: {', '.join(member_names) or 'none'}. "
+            "Carefully analyse this medical or financial image. "
+            "If it is a lab report or blood test result: extract EVERY test parameter — test name, "
+            "numeric value, unit (e.g. mg/dL, IU/L, %) and reference range. Put each in lab_results[]. "
+            "If it is a prescription: extract doctor name, date, and EVERY medication with dose, "
+            "frequency and duration. Put in prescriptions[]. "
+            "If it is a receipt or bill: extract each line item as a transaction with amount. "
+            "If it is a ticket or boarding pass: create a trip entry. "
+            "For any other document extract relevant structured data. "
+            "Return strict JSON per the schema. No prose, no markdown fences."
         )
         return await parse_image(
             tmp_path, mime_type, user_prompt, SYSTEM_PROMPT,

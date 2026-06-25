@@ -576,8 +576,11 @@ async def inbox_text(body: InboxIn, current_user: dict = Depends(get_current_use
 async def inbox_file(
     file: UploadFile = File(...),
     member_id: Optional[str] = Form(None),
+    dry_run: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
+    """Upload + parse a document. dry_run=true returns proposed records without saving them."""
+    is_dry_run = dry_run in ("true", "1", "yes")
     data = await file.read()
     filename = file.filename or "upload"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -601,6 +604,7 @@ async def inbox_file(
     members = await db.members.find({"user_id": family_uid}, {"_id": 0, "name": 1}).to_list(50)
     member_names = [m["name"] for m in members]
     parsed: dict = {"summary": f"Uploaded {filename}", "module": "generic", "confidence": 0.0}
+    is_image = content_type.startswith("image/") or ext in ("jpg", "jpeg", "png", "webp", "gif", "heic", "heif")
     counts: dict = {}
 
     try:
@@ -611,10 +615,19 @@ async def inbox_file(
         elif ext in ("txt", "csv", "json", "md"):
             text = data.decode("utf-8", errors="ignore")
             parsed = await parse_universal(text, today_str(), member_names)
-        elif content_type.startswith("image/") or ext in ("jpg", "jpeg", "png", "webp", "gif"):
+        elif is_image:
             parsed = await parse_image_file(data, content_type, today_str(), member_names)
+            parsed["_source"] = "vision"
     except Exception as e:
         logger.error(f"Parse error for {filename}: {e}")
+
+    # In dry_run mode: store the document stub but do NOT create any records yet.
+    # The client will show a confirm modal and call /inbox/apply.
+    if is_dry_run:
+        await db.documents.update_one({"id": doc_id}, {"$set": {
+            "parsed_summary": parsed.get("summary"),
+        }})
+        return {"document_id": doc_id, "parsed": parsed, "proposed": True}
 
     if parsed.get("confidence", 0) > 0 or parsed.get("module") != "generic":
         counts = await _apply_parsed(current_user, parsed, member_id, doc_id=doc_id)
@@ -628,6 +641,53 @@ async def inbox_file(
         "document_id": doc_id, "created_at": now_iso(),
     })
     return {"document_id": doc_id, "parsed": parsed, "counts": counts}
+
+
+class ApplyInboxIn(BaseModel):
+    parsed: dict
+    doc_id: Optional[str] = None
+    member_id: Optional[str] = None
+    selected_types: Optional[List[str]] = None
+
+
+@api.post("/inbox/apply")
+async def inbox_apply(body: ApplyInboxIn, current_user: dict = Depends(get_current_user)):
+    """Apply user-confirmed records from a dry-run parse. Writes to update_log."""
+    ALL_RECORD_TYPES = [
+        "transactions", "investments", "loans", "lab_results", "prescriptions",
+        "vitals", "trips", "career_events", "goals", "supplements", "generic_entries",
+    ]
+    parsed = {**body.parsed}
+    if body.selected_types is not None:
+        for t in ALL_RECORD_TYPES:
+            if t not in body.selected_types:
+                parsed[t] = []
+
+    counts = await _apply_parsed(current_user, parsed, body.member_id, doc_id=body.doc_id)
+    family_uid = get_family_user_id(current_user)
+
+    # Write to update_log
+    await db.update_log.insert_one({
+        "id": new_id(), "user_id": family_uid, "doc_id": body.doc_id,
+        "applied_counts": counts, "parsed_summary": parsed.get("summary"),
+        "selected_types": body.selected_types, "created_at": now_iso(),
+    })
+
+    # Finalise document record
+    if body.doc_id:
+        await db.documents.update_one({"id": body.doc_id}, {"$set": {
+            "parsed_summary": parsed.get("summary"), "counts": counts,
+        }})
+
+    # Add to inbox_log so Overview shows the activity
+    await db.inbox_log.insert_one({
+        "id": new_id(), "user_id": family_uid, "kind": "file",
+        "input_preview": parsed.get("summary", "")[:500],
+        "parsed": parsed, "counts": counts,
+        "document_id": body.doc_id, "created_at": now_iso(),
+    })
+
+    return {"counts": counts}
 
 
 @api.get("/inbox/log")
