@@ -52,6 +52,9 @@ INR, generic enough to accept any report or pdf and route to the right module.
 - **Priority 4 (Health UI)**: 4-stat summary header, Vitals per-kind sparklines, Labs ALL charts (≥2pts) + flagged toggle, Appointments Upcoming/Past split, Active Meds subtitle with last prescription date
 - **Priority 3 (Finance UI)**: Per-tab 3-card summary bars (changes per active tab), Insurance expiry ≤30 days → red row highlight, Subscriptions monthly total in summary
 - **Priority 7 (Budget vs Actuals)**: New Finance tab with month picker, grouped bar chart (Budget amber vs Actual green/red), progress bar table per category, full CRUD via /api/finance/budget
+- **Priority 6 (Plan Upload → Goal Target Auto-Update)**: `/inbox/file` dry_run returns `plan_updates` array (existing vs proposed target diff). `DiffConfirmView` shows amber-colored "Goal Target Updates" section with per-item checkboxes. `/inbox/apply` accepts `approved_goal_names` for selective goal target updates
+- **Household Notifications**: `FamilyOverview` (`/household`) has `HouseholdNotifications` section that fetches `/alerts`, filters health alerts, and shows member-named alerts (e.g., "Anupam Das's Cholesterol is 220.0 mg/dL (high)")
+- **Bug fix**: `/api/search` was using wrong MongoDB collection names (`health_labs`, `health_appointments`) — fixed to `lab_results`, `appointments`
 - **Priority 10.1 (Global Search)**: Cmd+K command palette, searches transactions/labs/goals/appointments/investments, backend /api/search endpoint, keyboard navigation
 - **Priority 10.2 (Dark mode)**: Moon/Sun toggle in header, dark CSS variables, localStorage persistence (flos_dark)
 - **Priority 10.4 (Mobile bottom nav)**: Fixed 5-item bottom nav bar on mobile, floating search button
