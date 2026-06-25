@@ -1,21 +1,14 @@
-"""AI parsing brain.
+"""AI parsing brain — domain-specific prompting layer.
 
-- parse_universal(text): free text / PDF text → structured JSON (Claude Sonnet 4.5)
-- parse_image_file(path, mime): photo/image → structured JSON (Gemini multimodal)
-Both return the same schema so the rest of the app is module-agnostic.
+Calls services/ai_service for all LLM interactions.
+Never imports from emergentintegrations directly.
 """
 import os
-import json
-import logging
-import re
 import tempfile
-from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+import logging
+from services.ai_service import parse_text, parse_image
 
 logger = logging.getLogger(__name__)
-
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
-CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-GEMINI_MODEL = "gemini-2.5-flash"
 
 SYSTEM_PROMPT = """You are the parsing brain of a Personal & Family Life Operating System.
 
@@ -91,63 +84,41 @@ Rules:
 """
 
 
-def _extract_json(text: str) -> dict:
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?", "", text).strip()
-    text = re.sub(r"```$", "", text).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        return {"summary": "Could not parse", "module": "generic", "confidence": 0.0}
-    try:
-        return json.loads(text[start:end + 1])
-    except Exception as e:
-        logger.error(f"JSON parse failed: {e}")
-        return {"summary": "Could not parse", "module": "generic", "confidence": 0.0}
-
-
-async def parse_universal(content: str, today_iso: str, member_names: list[str]) -> dict:
-    if not EMERGENT_LLM_KEY:
-        raise RuntimeError("EMERGENT_LLM_KEY not configured")
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"parse-{today_iso}",
-        system_message=SYSTEM_PROMPT,
-    ).with_model("anthropic", CLAUDE_MODEL)
+async def parse_universal(content: str, today_iso: str, member_names: list) -> dict:
+    """Parse free-form text or extracted document text into structured JSON."""
     user_text = (
         f"Today's date is {today_iso}.\n"
         f"Known family members: {', '.join(member_names) if member_names else 'none'}.\n\n"
         f"INPUT:\n{content[:60000]}\n\n"
         f"Return strict JSON now."
     )
-    response = await chat.send_message(UserMessage(text=user_text))
-    text = response if isinstance(response, str) else str(response)
-    return _extract_json(text)
+    return await parse_text(user_text, SYSTEM_PROMPT, session_id=f"parse-{today_iso}")
 
 
-async def parse_image_file(data: bytes, mime_type: str, today_iso: str, member_names: list[str]) -> dict:
-    """Use Gemini multimodal to extract structured data from image."""
-    if not EMERGENT_LLM_KEY:
-        raise RuntimeError("EMERGENT_LLM_KEY not configured")
+async def parse_image_file(data: bytes, mime_type: str, today_iso: str, member_names: list) -> dict:
+    """Parse an image (photo of prescription, lab report, receipt, etc.) via Gemini multimodal Vision."""
     ext = mime_type.split("/")[-1].replace("jpeg", "jpg") or "png"
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
         tmp.write(data)
         tmp_path = tmp.name
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"img-parse-{today_iso}",
-            system_message=SYSTEM_PROMPT,
-        ).with_model("gemini", GEMINI_MODEL)
-        f = FileContentWithMimeType(file_path=tmp_path, mime_type=mime_type)
-        msg = UserMessage(
-            text=(f"Today's date is {today_iso}. Known members: {', '.join(member_names) or 'none'}. "
-                  "Read this image (could be a prescription, lab report, receipt, ticket, certificate, etc.) "
-                  "and return strict JSON per the schema."),
-            file_contents=[f],
+        user_prompt = (
+            f"Today's date is {today_iso}. "
+            f"Known family members: {', '.join(member_names) or 'none'}. "
+            "Carefully analyse this medical or financial image. "
+            "If it is a lab report or blood test result: extract EVERY test parameter — test name, "
+            "numeric value, unit (e.g. mg/dL, IU/L, %) and reference range. Put each in lab_results[]. "
+            "If it is a prescription: extract doctor name, date, and EVERY medication with dose, "
+            "frequency and duration. Put in prescriptions[]. "
+            "If it is a receipt or bill: extract each line item as a transaction with amount. "
+            "If it is a ticket or boarding pass: create a trip entry. "
+            "For any other document extract relevant structured data. "
+            "Return strict JSON per the schema. No prose, no markdown fences."
         )
-        response = await chat.send_message(msg)
-        text = response if isinstance(response, str) else str(response)
-        return _extract_json(text)
+        return await parse_image(
+            tmp_path, mime_type, user_prompt, SYSTEM_PROMPT,
+            session_id=f"img-{today_iso}"
+        )
     finally:
         try:
             os.unlink(tmp_path)

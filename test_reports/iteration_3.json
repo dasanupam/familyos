@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration D - Plan Upload Auto-Update (Part 5) + Diff/Confirm + Image OCR. All 22 backend tests passed (100%). All 13 frontend features verified and working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_inbox_plan_upload.py",
+    "/app/test_reports/pytest/pytest_results_d.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All code is clean. server.py inbox section is well-structured with dry_run gating. ai_parser.py parse_image_file has comprehensive lab-specific prompting. UniversalInbox.jsx DiffConfirmView is complete with proper data-testid attributes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_inbox_plan_upload.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 passed)",
+    "frontend": "100% (all 13 features verified)"
+  },
+  "features_tested": {
+    "inbox_text_auto_save": "PASS - POST /api/inbox/text returns {parsed, counts} immediately",
+    "inbox_file_dry_run_proposed_true": "PASS - dry_run=true returns {proposed: true, parsed, document_id}",
+    "inbox_file_dry_run_no_transactions": "PASS - dry_run=true does NOT create transactions",
+    "inbox_file_dry_run_no_lab_results": "PASS - dry_run=true does NOT create lab_results",
+    "inbox_file_dry_run_stores_document": "PASS - document stored in DB and appears in /documents list",
+    "inbox_file_no_dry_run_creates_records": "PASS - without dry_run, returns counts (backward compat)",
+    "inbox_apply_all_types": "PASS - POST /api/inbox/apply with all selected_types returns counts",
+    "inbox_apply_only_transactions": "PASS - lab_results=0 when not in selected_types",
+    "inbox_apply_only_lab_results": "PASS - transactions=0 when not in selected_types",
+    "inbox_apply_writes_update_log": "PASS - inbox_log count increases after apply",
+    "inbox_apply_empty_types": "PASS - empty selected_types creates 0 records",
+    "inbox_apply_requires_auth": "PASS - 401 without auth",
+    "diff_confirm_view_appears": "PASS - DiffConfirmView shown after file upload with parseable content",
+    "diff_confirm_parsed_summary": "PASS - Summary text from AI displayed in DiffConfirmView",
+    "diff_confirm_checkboxes_per_type": "PASS - 2 checkboxes for Transactions and Lab Results",
+    "diff_confirm_expand_collapse": "PASS - expand shows individual records, collapse hides them",
+    "diff_confirm_apply_button": "PASS - Apply button shows correct count of selected records",
+    "diff_confirm_apply_button_count_updates": "PASS - Apply button text updates to '1 record' after deselecting Transactions",
+    "diff_confirm_skip_dismisses_modal": "PASS - Skip dismisses DiffConfirmView, modal header returns to main state",
+    "diff_confirm_skip_toast": "PASS - Toast 'Records skipped — file is still stored in Documents' shown after Skip",
+    "diff_confirm_apply_partial": "PASS - Applying with Transactions deselected saves only lab_results (+1), no transactions in result",
+    "vision_ai_badge": "PASS - Vision AI badge (Sparkles icon + 'Vision AI' text) appears in DiffConfirmView for image uploads",
+    "heic_file_input_accept": "PASS - accept attribute includes .heic: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.txt,.csv,.json,.md'",
+    "image_ocr_enhanced_prompt": "PASS (code review) - parse_image_file in ai_parser.py has lab-specific instructions (lines 105-117)"
+  },
+  "seed_data_creation": "Test transactions, lab results applied via API tests. Test data includes: TEST_APPLY_TX salary (185000), HbA1c_TEST_APPLY (5.6%), TSH tests. Residual data from UI tests (lab results from partial apply tests).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All Iteration D (Part 5) features verified. Backend: 22/22 tests in /app/backend/tests/test_inbox_plan_upload.py. Key flows: dry_run=true on /inbox/file returns {proposed, parsed, document_id} without creating records. /inbox/apply with selected_types=[\"lab_results\"] correctly skips transactions. DiffConfirmView UI works end-to-end. Vision AI badge appears for image uploads. HEIC accepted in file input. No bugs found. Login uses access_token key."
+}

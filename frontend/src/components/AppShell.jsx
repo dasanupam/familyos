@@ -1,26 +1,44 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { LayoutDashboard, Wallet, HeartPulse, Target, FileText, Users, LogOut, Sparkles, Inbox, Plane, Briefcase } from "lucide-react";
+import {
+  LayoutDashboard, Wallet, HeartPulse, Target, FileText,
+  Users, LogOut, Sparkles, Inbox, Plane, Briefcase, Home,
+} from "lucide-react";
 import UniversalInbox from "@/components/UniversalInbox";
 import FamilySwitcher from "@/components/FamilySwitcher";
 import { useState } from "react";
 
-const nav = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, testid: "nav-overview" },
-  { to: "/household", label: "Household", icon: Users, testid: "nav-household" },
-  { to: "/finance", label: "Finance", icon: Wallet, testid: "nav-finance" },
-  { to: "/health", label: "Health", icon: HeartPulse, testid: "nav-health" },
-  { to: "/travel", label: "Travel", icon: Plane, testid: "nav-travel" },
-  { to: "/career", label: "Career", icon: Briefcase, testid: "nav-career" },
-  { to: "/goals", label: "Goals & FIRE", icon: Target, testid: "nav-goals" },
-  { to: "/documents", label: "Documents", icon: FileText, testid: "nav-documents" },
-  { to: "/family", label: "Family", icon: Users, testid: "nav-family" },
+const ADMIN_NAV = [
+  { to: "/overview",  label: "Overview",    icon: LayoutDashboard, end: true },
+  { to: "/household", label: "Household",   icon: Users },
+  { to: "/finance",   label: "Finance",     icon: Wallet },
+  { to: "/health",    label: "Health",      icon: HeartPulse },
+  { to: "/travel",    label: "Travel",      icon: Plane },
+  { to: "/career",    label: "Career",      icon: Briefcase },
+  { to: "/goals",     label: "Goals & FIRE",icon: Target },
+  { to: "/property",  label: "Property",    icon: Home },
+  { to: "/documents", label: "Documents",   icon: FileText },
+  { to: "/family",    label: "Family",      icon: Users },
+];
+
+const MEMBER_NAV = [
+  { to: "/overview",  label: "Overview",    icon: LayoutDashboard, end: true },
+  { to: "/finance",   label: "Finance",     icon: Wallet },
+  { to: "/health",    label: "Health",      icon: HeartPulse },
+  { to: "/travel",    label: "Travel",      icon: Plane },
+  { to: "/career",    label: "Career",      icon: Briefcase },
+  { to: "/goals",     label: "Goals & FIRE",icon: Target },
+  { to: "/property",  label: "Property",    icon: Home },
+  { to: "/documents", label: "Documents",   icon: FileText },
 ];
 
 export default function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [inboxOpen, setInboxOpen] = useState(false);
+
+  const isAdmin = !user?.role || user?.role === "admin";
+  const nav = isAdmin ? ADMIN_NAV : MEMBER_NAV;
 
   return (
     <div className="min-h-screen bg-[#F2F0E9] grain relative">
@@ -39,8 +57,8 @@ export default function AppShell() {
               <NavLink
                 key={n.to}
                 to={n.to}
-                end={n.to === "/"}
-                data-testid={n.testid}
+                end={n.end || false}
+                data-testid={`nav-${n.label.toLowerCase().replace(/[^a-z]/g, "-")}`}
                 className={({ isActive }) =>
                   `px-3 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1.5 ${
                     isActive
@@ -66,7 +84,8 @@ export default function AppShell() {
             Universal Inbox
           </button>
 
-          <FamilySwitcher />
+          {/* Family switcher: admin only */}
+          {isAdmin && <FamilySwitcher />}
 
           <button
             data-testid="logout-button"
@@ -84,7 +103,7 @@ export default function AppShell() {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.to === "/"}
+              end={n.end || false}
               className={({ isActive }) =>
                 `whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 ${
                   isActive ? "bg-[#184A31] text-white" : "text-[#5E6A62] bg-white border border-[#E5E2DC]"
@@ -101,6 +120,9 @@ export default function AppShell() {
       <main className="max-w-[1400px] mx-auto px-4 md:px-8 py-6 md:py-10 relative z-10">
         <div className="text-[13px] text-[#5E6A62] mb-4 hidden md:block">
           Welcome back, <span className="text-[#111812] font-medium">{user?.name}</span>
+          {user?.role === "member" && (
+            <span className="ml-2 text-xs bg-[#184A31]/10 text-[#184A31] px-2 py-0.5 rounded-full">Member view</span>
+          )}
         </div>
         <Outlet />
       </main>

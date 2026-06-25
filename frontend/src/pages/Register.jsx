@@ -16,7 +16,7 @@ export default function Register() {
     try {
       await register(form.name, form.email, form.password);
       toast.success("Welcome aboard");
-      nav("/");
+      nav("/overview");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Could not register");
     } finally {

@@ -57,10 +57,31 @@ Added end-to-end:
 - **Net-worth time series**: `POST /api/finance/snapshot` saves a daily snapshot; `GET /api/finance/net-worth-series` lists them.
 - **Investment returns**: `GET /api/finance/investments/xirr` returns per-holding + overall absolute return %.
 
-## Backlog (P1/P2 still open)
-- True XIRR with per-lot cashflows (current is absolute return)
-- Net-worth time-series chart on Overview (data is there, chart pending)
-- Inline edit UI for travel/career pages (PATCH endpoint exists)
-- Linked-records panel in Documents page (API exists)
-- Auto-snapshot net-worth on a schedule
-- Weekly digest email (Resend)
+## Iteration D — 2026-02 (this session)
+- **Part 5 — Plan Upload Auto-Update (Diff/Confirm Modal)**:
+  - `/api/inbox/file` gains `dry_run=true` form param: parses document but does NOT create records, returns `{proposed: true, parsed, document_id}`.
+  - New `/api/inbox/apply` endpoint: accepts `{parsed, doc_id, member_id, selected_types[]}`, applies only the user-selected record types, writes to `update_log` collection.
+  - `UniversalInbox.jsx` rewritten with `DiffConfirmView` component: per-type checkboxes, expand/collapse preview of each record, Apply count button, Skip.
+  - Text inbox unchanged (still auto-saves immediately — appropriate for quick one-liners).
+- **Image OCR for Lab Photos (Gemini Vision)**:
+  - Already wired via `parse_image_file()` → Gemini 2.5 Flash multimodal. Now enhanced with lab-specific prompting (extract every parameter, unit, reference range).
+  - Accepted file types extended to include `.heic` / `.heif` (iPhone photos).
+  - "Vision AI" badge shown in diff confirm modal and result card when processed via Gemini.
+
+## Backlog (remaining open items)
+- Auto-snapshot net-worth on a schedule (cron / background task)
+- Weekly digest email (Resend integration)
+- PWA install + push notifications
+- Shared household notifications ("Amal's HbA1c is above 6.5%")
+- True per-lot XIRR (currently CAGR approximation when purchase_date set)
+
+
+## Iteration C — 2026-02 (this session)
+- **Career inline edit**: Edit buttons (pencil) on timeline events, role cards, and skills. PATCH via `/api/career-events`, `/api/career-roles`, `/api/career-skills`.
+- **PATCH_COLLECTIONS**: Added `career-roles` and `career-skills` to backend generic PATCH handler.
+- **CSV_KINDS**: Added `career_roles` and `career_skills` to backend export.
+- **Investment CAGR**: Added `purchase_date` field to `InvestmentIn` model. `/finance/investments/xirr` now returns `cagr` (annualized) when `purchase_date` is set.
+- **Finance investments table**: Added "Return %" computed column (green/red based on gain/loss).
+- **Finance investments form**: Added `purchase_date` date picker field.
+- **Documents linked records**: Already implemented via `LinkedRecords` component — verified working.
+- **Net worth time-series chart**: Already wired in Overview.jsx — auto-snapshots on each load, Recharts LineChart renders when >= 2 snapshots exist.
