@@ -1095,7 +1095,8 @@ def _to_csv(rows: list) -> str:
 CSV_KINDS = {
     "transactions": db.transactions, "investments": db.investments, "loans": db.loans,
     "lab_results": db.lab_results, "vitals": db.vitals, "prescriptions": db.prescriptions,
-    "trips": db.trips, "career_events": db.career_events, "goals": db.goals,
+    "trips": db.trips, "career_events": db.career_events, "career_roles": db.career_roles,
+    "career_skills": db.career_skills, "goals": db.goals,
 }
 
 

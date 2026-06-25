@@ -57,10 +57,21 @@ Added end-to-end:
 - **Net-worth time series**: `POST /api/finance/snapshot` saves a daily snapshot; `GET /api/finance/net-worth-series` lists them.
 - **Investment returns**: `GET /api/finance/investments/xirr` returns per-holding + overall absolute return %.
 
-## Backlog (P1/P2 still open)
-- True XIRR with per-lot cashflows (current is absolute return)
-- Net-worth time-series chart on Overview (data is there, chart pending)
-- Inline edit UI for travel/career pages (PATCH endpoint exists)
-- Linked-records panel in Documents page (API exists)
+## Backlog (remaining open items)
+- True XIRR with per-lot cashflows → now using CAGR when purchase_date set (upgraded 2026-02)
 - Auto-snapshot net-worth on a schedule
 - Weekly digest email (Resend)
+- Image OCR for lab photos (Gemini multimodal)
+- PWA install + push notifications
+- Shared household notifications
+- Part 5: Plan Upload → Auto-update with diff/confirm modal and update_log
+
+## Iteration C — 2026-02 (this session)
+- **Career inline edit**: Edit buttons (pencil) on timeline events, role cards, and skills. PATCH via `/api/career-events`, `/api/career-roles`, `/api/career-skills`.
+- **PATCH_COLLECTIONS**: Added `career-roles` and `career-skills` to backend generic PATCH handler.
+- **CSV_KINDS**: Added `career_roles` and `career_skills` to backend export.
+- **Investment CAGR**: Added `purchase_date` field to `InvestmentIn` model. `/finance/investments/xirr` now returns `cagr` (annualized) when `purchase_date` is set.
+- **Finance investments table**: Added "Return %" computed column (green/red based on gain/loss).
+- **Finance investments form**: Added `purchase_date` date picker field.
+- **Documents linked records**: Already implemented via `LinkedRecords` component — verified working.
+- **Net worth time-series chart**: Already wired in Overview.jsx — auto-snapshots on each load, Recharts LineChart renders when >= 2 snapshots exist.
