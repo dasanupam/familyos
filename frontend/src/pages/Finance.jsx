@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { api, formatINR, formatINRFull, API } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Plus, Trash2, TrendingUp, TrendingDown, Edit3, Download, BadgeIndianRupee } from "lucide-react";
 import { toast } from "sonner";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, LabelList } from "recharts";
 
 const Section = ({ title, children, action }) => (
   <div className="card-surface p-5 md:p-6">
@@ -23,6 +24,7 @@ const TABS = [
   ["tax", "Tax"],
   ["insurance", "Insurance"],
   ["subscriptions", "Subscriptions"],
+  ["budget", "Budget vs Actuals"],
 ];
 
 export default function Finance() {
@@ -41,6 +43,8 @@ export default function Finance() {
   const [form, setForm] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
+  const [budgets, setBudgets] = useState([]);
+  const [budgetMonth, setBudgetMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const memberParam = activeMember === "family" ? "" : `?member_id=${activeMember}`;
   const defaultMemberId = activeMember === "family" ? members[0]?.id : activeMember;
@@ -66,10 +70,102 @@ export default function Finance() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Separate budget fetch (month-dependent)
+  useEffect(() => {
+    const mp = memberParam;
+    const q = mp ? `${mp}&month=${budgetMonth}` : `?month=${budgetMonth}`;
+    api.get(`/finance/budget${q}`).then((r) => setBudgets(r.data)).catch(() => {});
+  }, [memberParam, budgetMonth]);
+
   const memberName = (id) => members.find((m) => m.id === id)?.name || "—";
 
+  const today = new Date().toISOString().slice(0, 10);
+  const daysUntil = (date) => date ? Math.ceil((new Date(date) - new Date(today)) / 86400000) : null;
+
+  const tabSummary = useMemo(() => {
+    if (tab === "transactions") {
+      const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + (t.amount || 0), 0);
+      const expense = tx.filter((t) => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
+      return [
+        { label: "Total income", value: formatINRFull(income), color: "#367A50" },
+        { label: "Total expenses", value: formatINRFull(expense), color: "#C25942" },
+        { label: "Net", value: formatINRFull(income - expense), color: income >= expense ? "#367A50" : "#C25942" },
+      ];
+    }
+    if (tab === "investments") {
+      const invested = inv.reduce((s, i) => s + (i.invested_value || 0), 0);
+      const current = inv.reduce((s, i) => s + (i.current_value || 0), 0);
+      const retPct = invested > 0 ? ((current - invested) / invested * 100).toFixed(1) : null;
+      return [
+        { label: "Total invested", value: formatINRFull(invested) },
+        { label: "Current value", value: formatINRFull(current), color: current >= invested ? "#367A50" : "#C25942" },
+        { label: "Total return", value: retPct != null ? `${retPct > 0 ? "+" : ""}${retPct}%` : "—", color: retPct > 0 ? "#367A50" : "#C25942" },
+      ];
+    }
+    if (tab === "sip") {
+      const monthly = sip.filter((s) => s.status === "active").reduce((acc, s) => acc + (s.monthly_amount || 0), 0);
+      const invested = sip.reduce((acc, s) => acc + (s.total_invested || 0), 0);
+      const current = sip.reduce((acc, s) => acc + (s.current_value || 0), 0);
+      return [
+        { label: "Monthly SIP (active)", value: formatINRFull(monthly) },
+        { label: "Total invested", value: formatINRFull(invested) },
+        { label: "Current value", value: formatINRFull(current), color: current >= invested ? "#367A50" : "#C25942" },
+      ];
+    }
+    if (tab === "rsu") {
+      const totalUnits = rsu.reduce((s, r) => s + (r.total_units || 0), 0);
+      const vestedUnits = rsu.reduce((s, r) => s + (r.vested_units || 0), 0);
+      const unvestedValue = rsu.reduce((s, r) => s + ((r.total_units - (r.vested_units || 0)) * (r.current_price || 0)), 0);
+      return [
+        { label: "Total units", value: totalUnits.toLocaleString() },
+        { label: "Vested units", value: vestedUnits.toLocaleString(), color: "#367A50" },
+        { label: "Unvested value", value: formatINRFull(unvestedValue) },
+      ];
+    }
+    if (tab === "loans") {
+      const outstanding = loans.reduce((s, l) => s + (l.outstanding || 0), 0);
+      const emi = loans.reduce((s, l) => s + (l.emi || 0), 0);
+      return [
+        { label: "Total outstanding", value: formatINRFull(outstanding), color: "#C25942" },
+        { label: "Total EMI / month", value: formatINRFull(emi) },
+        { label: "Active loans", value: loans.length.toString() },
+      ];
+    }
+    if (tab === "insurance") {
+      const totalPremium = insurance.reduce((s, i) => s + (i.annual_premium || 0), 0);
+      const expiringSoon = insurance.filter((i) => { const d = daysUntil(i.policy_end); return d != null && d >= 0 && d <= 30; }).length;
+      return [
+        { label: "Policies", value: insurance.length.toString() },
+        { label: "Annual premium", value: formatINRFull(totalPremium) },
+        { label: "Expiring ≤30 days", value: expiringSoon.toString(), color: expiringSoon > 0 ? "#C25942" : undefined },
+      ];
+    }
+    if (tab === "subscriptions") {
+      const monthlyTotal = subs.filter((s) => s.status === "active").reduce((acc, s) => {
+        if (s.billing_cycle === "annual") return acc + (s.amount || 0) / 12;
+        return acc + (s.amount || 0);
+      }, 0);
+      const active = subs.filter((s) => s.status === "active").length;
+      return [
+        { label: "Monthly spend", value: formatINRFull(Math.round(monthlyTotal)) },
+        { label: "Annual equivalent", value: formatINRFull(Math.round(monthlyTotal * 12)) },
+        { label: "Active subscriptions", value: active.toString() },
+      ];
+    }
+    if (tab === "budget") {
+      const totalBudget = budgets.reduce((s, b) => s + (b.budgeted_amount || 0), 0);
+      const totalActual = budgets.reduce((s, b) => s + (b.actual_amount || 0), 0);
+      return [
+        { label: "Total budget", value: formatINRFull(totalBudget) },
+        { label: "Total spent", value: formatINRFull(totalActual), color: totalActual > totalBudget ? "#C25942" : undefined },
+        { label: "Remaining", value: formatINRFull(Math.max(0, totalBudget - totalActual)), color: totalBudget - totalActual < 0 ? "#C25942" : "#367A50" },
+      ];
+    }
+    return null;
+  }, [tab, tx, inv, loans, sip, rsu, insurance, subs, budgets]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const getTabData = () => ({
-    transactions: tx, investments: inv, loans, sip, rsu, tax, insurance, subscriptions: subs,
+    transactions: tx, investments: inv, loans, sip, rsu, tax, insurance, subscriptions: subs, budget: budgets,
   })[tab] || [];
 
   const filteredRows = () => {
@@ -88,6 +184,8 @@ export default function Finance() {
           const numFields = { transactions: ["amount"], investments: ["units", "current_value", "invested_value"], loans: ["outstanding", "emi", "rate"] };
           (numFields[tab] || []).forEach((k) => { if (body[k]) body[k] = Number(body[k]); });
           await api.patch(`/${tab === "transactions" ? "transactions" : tab === "investments" ? "investments" : "loans"}/${editingId}`, body);
+        } else if (tab === "budget") {
+          await api.put(`/finance/budget/${editingId}`, { ...body, budgeted_amount: Number(body.budgeted_amount || 0), month: body.month || budgetMonth });
         } else {
           const routeMap = { sip: "/finance/sip", rsu: "/finance/rsu", tax: "/finance/tax", insurance: "/finance/insurance", subscriptions: "/finance/subscriptions" };
           await api.put(`${routeMap[tab]}/${editingId}`, body);
@@ -99,8 +197,9 @@ export default function Finance() {
         else if (tab === "sip") await api.post("/finance/sip", { ...body, monthly_amount: Number(body.monthly_amount || 0), total_invested: body.total_invested ? Number(body.total_invested) : null, current_value: body.current_value ? Number(body.current_value) : null });
         else if (tab === "rsu") await api.post("/finance/rsu", { ...body, total_units: Number(body.total_units || 0), current_price: body.current_price ? Number(body.current_price) : null, vested_units: body.vested_units ? Number(body.vested_units) : 0 });
         else if (tab === "tax") await api.post("/finance/tax", { ...body, income_salary: body.income_salary ? Number(body.income_salary) : null, tds_deducted: body.tds_deducted ? Number(body.tds_deducted) : null });
-        else if (tab === "insurance") await api.post("/finance/insurance", { ...body, sum_assured: body.sum_assured ? Number(body.sum_assured) : null, annual_premium: body.annual_premium ? Number(body.annual_premium) : null });
+        else if (tab === "insurance") await api.post("/finance/insurance", { ...body, policy_type: body.policy_type || "term", sum_assured: body.sum_assured ? Number(body.sum_assured) : null, annual_premium: body.annual_premium ? Number(body.annual_premium) : null });
         else if (tab === "subscriptions") await api.post("/finance/subscriptions", { ...body, amount: Number(body.amount || 0) });
+        else if (tab === "budget") await api.post("/finance/budget", { ...body, budgeted_amount: Number(body.budgeted_amount || 0), month: body.month || budgetMonth });
       }
       setShowAdd(false); setForm({}); setEditingId(null);
       await refresh(); toast.success(editingId ? "Updated" : "Added");
@@ -109,9 +208,15 @@ export default function Finance() {
 
   const startEdit = (row) => { setEditingId(row.id); setForm(row); setShowAdd(true); };
   const remove = async (kind, id) => {
-    const routeMap = { transactions: "/finance/transactions", investments: "/finance/investments", loans: "/finance/loans", sip: "/finance/sip", rsu: "/finance/rsu", tax: "/finance/tax", insurance: "/finance/insurance", subscriptions: "/finance/subscriptions" };
+    const routeMap = { transactions: "/finance/transactions", investments: "/finance/investments", loans: "/finance/loans", sip: "/finance/sip", rsu: "/finance/rsu", tax: "/finance/tax", insurance: "/finance/insurance", subscriptions: "/finance/subscriptions", budget: "/finance/budget" };
     await api.delete(`${routeMap[tab]}/${id}`);
-    refresh();
+    if (tab === "budget") {
+      const mp = memberParam;
+      const q = mp ? `${mp}&month=${budgetMonth}` : `?month=${budgetMonth}`;
+      api.get(`/finance/budget${q}`).then((r) => setBudgets(r.data)).catch(() => {});
+    } else {
+      refresh();
+    }
   };
 
   const downloadCsv = () => {
@@ -160,6 +265,18 @@ export default function Finance() {
           )}
         </div>
       </div>
+
+      {/* Per-tab summary bar */}
+      {tabSummary && (
+        <div className="grid grid-cols-3 gap-3" data-testid={`finance-summary-${tab}`}>
+          {tabSummary.map((card) => (
+            <div key={card.label} className="card-surface p-4">
+              <div className="label-eyebrow">{card.label}</div>
+              <div className="font-display text-xl mt-1" style={card.color ? { color: card.color } : {}}>{card.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Section title={tab}>
         {tab === "transactions" && <Table rows={filteredRows()} cols={[
@@ -229,7 +346,9 @@ export default function Finance() {
           { k: "annual_premium", label: "Premium / yr", render: (v) => v ? formatINRFull(v) : "—", align: "right" },
           { k: "policy_end", label: "Expires" },
           { k: "member_id", label: "Member", render: memberName },
-        ]} onDelete={(r) => remove("insurance", r.id)} onEdit={startEdit} testidPrefix="finance-ins" empty="No insurance policies." />}
+        ]} onDelete={(r) => remove("insurance", r.id)} onEdit={startEdit} testidPrefix="finance-ins"
+        rowClass={(r) => { const d = daysUntil(r.policy_end); return d != null && d >= 0 && d <= 30 ? "bg-[#FDF3F1] border-[#C25942]/30" : ""; }}
+        empty="No insurance policies." />}
 
         {tab === "subscriptions" && <Table rows={filteredRows()} cols={[
           { k: "name", label: "Service" },
@@ -239,12 +358,16 @@ export default function Finance() {
           { k: "next_billing_date", label: "Next Due" },
           { k: "status", label: "Status" },
         ]} onDelete={(r) => remove("subscriptions", r.id)} onEdit={startEdit} testidPrefix="finance-sub" empty="No subscriptions tracked." />}
+
+        {tab === "budget" && (
+          <BudgetView budgets={budgets} budgetMonth={budgetMonth} setBudgetMonth={setBudgetMonth} onDelete={(r) => remove("budget", r.id)} onEdit={startEdit} />
+        )}
       </Section>
 
       {showAdd && (
         <Modal title={editingId ? `Edit ${tab}` : `Add ${tab}`} onClose={() => { setShowAdd(false); setEditingId(null); }}>
           <form onSubmit={submitAdd} className="space-y-3" data-testid="finance-add-form">
-            <SelectMember value={form.member_id || defaultMemberId} onChange={(v) => setForm({ ...form, member_id: v })} members={members} />
+            {tab !== "budget" && <SelectMember value={form.member_id || defaultMemberId} onChange={(v) => setForm({ ...form, member_id: v })} members={members} />}
             {tab === "transactions" && <>
               <Field label="Date" type="date" value={form.date || ""} onChange={(v) => setForm({ ...form, date: v })} />
               <Field label="Amount (₹)" type="number" value={form.amount || ""} onChange={(v) => setForm({ ...form, amount: v })} required />
@@ -306,6 +429,11 @@ export default function Finance() {
               <Field label="Next billing date" type="date" value={form.next_billing_date || ""} onChange={(v) => setForm({ ...form, next_billing_date: v })} />
               <Field label="Status" as="select" value={form.status || "active"} onChange={(v) => setForm({ ...form, status: v })} options={[["active","Active"],["cancelled","Cancelled"]]} />
             </>}
+            {tab === "budget" && <>
+              <Field label="Month" type="month" value={form.month || budgetMonth} onChange={(v) => setForm({ ...form, month: v })} required />
+              <Field label="Category" value={form.category || ""} onChange={(v) => setForm({ ...form, category: v })} required placeholder="groceries, salary, fuel…" />
+              <Field label="Budgeted amount (₹)" type="number" value={form.budgeted_amount || ""} onChange={(v) => setForm({ ...form, budgeted_amount: v })} required />
+            </>}
             <button data-testid="finance-submit-button" className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium">Save</button>
           </form>
         </Modal>
@@ -314,7 +442,90 @@ export default function Finance() {
   );
 }
 
-function Table({ rows, cols, onDelete, onEdit, testidPrefix, empty }) {
+function BudgetView({ budgets, budgetMonth, setBudgetMonth, onDelete, onEdit }) {
+  const chartData = budgets.map((b) => ({
+    category: b.category,
+    Budget: b.budgeted_amount || 0,
+    Actual: b.actual_amount || 0,
+    over: (b.actual_amount || 0) > (b.budgeted_amount || 0),
+  }));
+
+  return (
+    <div className="space-y-5" data-testid="budget-view">
+      <div className="flex items-center gap-3">
+        <div className="label-eyebrow">Month</div>
+        <input type="month" value={budgetMonth} onChange={(e) => setBudgetMonth(e.target.value)}
+          className="bg-white border border-[#E5E2DC] px-3 py-1.5 rounded-xl text-sm focus:outline-none focus:border-[#184A31]" />
+      </div>
+
+      {chartData.length > 0 ? (
+        <>
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} barCategoryGap="30%">
+                <CartesianGrid stroke="#E5E2DC" vertical={false} />
+                <XAxis dataKey="category" tick={{ fontSize: 11, fill: "#5E6A62" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#5E6A62" }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v) => [`₹${v.toLocaleString()}`, ""]} />
+                <Bar dataKey="Budget" fill="#D19B4C" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Actual" radius={[4, 4, 0, 0]}>
+                  {chartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.over ? "#C25942" : "#184A31"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="overflow-x-auto -mx-5 md:-mx-6">
+            <table className="w-full text-sm">
+              <thead className="text-left text-[#5E6A62] border-b border-[#E5E2DC]">
+                <tr>
+                  <th className="px-5 py-2 font-medium text-xs uppercase tracking-wider">Category</th>
+                  <th className="px-5 py-2 font-medium text-xs uppercase tracking-wider text-right">Budget</th>
+                  <th className="px-5 py-2 font-medium text-xs uppercase tracking-wider text-right">Actual</th>
+                  <th className="px-5 py-2 font-medium text-xs uppercase tracking-wider text-right">Remaining</th>
+                  <th className="px-5 py-2 font-medium text-xs uppercase tracking-wider">Used</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {budgets.map((b) => {
+                  const pct = b.budgeted_amount > 0 ? Math.min(100, (b.actual_amount || 0) / b.budgeted_amount * 100) : 0;
+                  const over = (b.actual_amount || 0) > (b.budgeted_amount || 0);
+                  return (
+                    <tr key={b.id} className={`border-b border-[#E5E2DC]/60 hover:bg-[#F2F0E9]/50 ${over ? "bg-[#FDF3F1]" : ""}`} data-testid="budget-row">
+                      <td className="px-5 py-3 font-medium capitalize">{b.category}</td>
+                      <td className="px-5 py-3 text-right font-mono">{formatINRFull(b.budgeted_amount)}</td>
+                      <td className={`px-5 py-3 text-right font-mono ${over ? "text-[#C25942]" : ""}`}>{formatINRFull(b.actual_amount || 0)}</td>
+                      <td className={`px-5 py-3 text-right font-mono ${over ? "text-[#C25942]" : "text-[#367A50]"}`}>{formatINRFull(Math.max(0, b.budgeted_amount - (b.actual_amount || 0)))}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-[#E5E2DC] rounded-full overflow-hidden" style={{ minWidth: 60 }}>
+                            <div className={`h-full rounded-full ${over ? "bg-[#C25942]" : "bg-[#184A31]"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs text-[#5E6A62] w-10 text-right">{pct.toFixed(0)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 whitespace-nowrap">
+                        <button onClick={() => onEdit(b)} className="text-[#5E6A62] hover:text-[#184A31] opacity-50 hover:opacity-100 mr-2"><Edit3 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => onDelete(b)} className="text-[#C25942] opacity-50 hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-[#5E6A62] py-4">No budget set for {budgetMonth}. Add categories above.</div>
+      )}
+    </div>
+  );
+}
+
+function Table({ rows, cols, onDelete, onEdit, testidPrefix, rowClass, empty }) {
   if (rows.length === 0) return <div className="text-sm text-[#5E6A62] py-4">{empty}</div>;
   return (
     <div className="overflow-x-auto -mx-5 md:-mx-6">
@@ -327,7 +538,7 @@ function Table({ rows, cols, onDelete, onEdit, testidPrefix, empty }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-b border-[#E5E2DC]/60 hover:bg-[#F2F0E9]/50" data-testid={`${testidPrefix}-row`}>
+            <tr key={r.id} className={`border-b border-[#E5E2DC]/60 hover:bg-[#F2F0E9]/50 ${rowClass ? rowClass(r) : ""}`} data-testid={`${testidPrefix}-row`}>
               {cols.map((c) => (
                 <td key={c.k} className={`px-5 md:px-6 py-3 ${c.align === "right" ? "text-right font-mono" : ""}`}>
                   {c.render ? c.render(r[c.k], r) : (r[c.k] ?? "—")}

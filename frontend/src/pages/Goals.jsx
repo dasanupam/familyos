@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatINRFull } from "@/lib/utils";
+import { formatINRFull } from "@/lib/api";
 import { toast } from "sonner";
 import { Target, Trash2, Edit3, Plus } from "lucide-react";
-import Modal from "@/components/Modal";
-import Field from "@/components/Field";
+import { Modal, Field } from "@/pages/Finance";
 import ExportCsvButton from "@/components/ExportCsvButton";
 
 const DOMAINS = ["personal", "finance", "health", "career", "travel"];

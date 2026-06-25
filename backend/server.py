@@ -1845,6 +1845,53 @@ async def get_alerts(current_user: dict = Depends(get_current_user)):
     return alerts
 
 
+# ── Global Search ──────────────────────────────────────────────────────────────
+@api.get("/search")
+async def global_search(q: str, current_user: dict = Depends(get_current_user)):
+    if not q or len(q) < 2:
+        return []
+    fuid = get_family_user_id(current_user)
+    ql = q.lower()
+    results = []
+
+    # Transactions
+    txs = await db.transactions.find({"user_id": fuid}, {"_id": 0}).to_list(500)
+    for t in txs:
+        if ql in str(t.get("merchant", "")).lower() or ql in str(t.get("category", "")).lower():
+            merchant = decrypt(t.get("merchant", "")) if t.get("merchant") else ""
+            results.append({"type": "transaction", "label": merchant or t.get("category", ""), "sub": f"₹{t.get('amount', '')} · {t.get('date', '')}", "link": "/finance"})
+
+    # Goals
+    goals = await db.goals.find({"user_id": fuid}, {"_id": 0}).to_list(200)
+    for g in goals:
+        if ql in str(g.get("name", "")).lower() or ql in str(g.get("domain", "")).lower():
+            results.append({"type": "goal", "label": g.get("name", ""), "sub": f"{g.get('domain', '')} · ₹{g.get('current', 0):,.0f} / ₹{g.get('target', 0):,.0f}", "link": "/goals"})
+
+    # Labs
+    labs = await db.health_labs.find({"user_id": fuid}, {"_id": 0}).to_list(500)
+    for l in labs:
+        test = decrypt(l.get("test", "")) if l.get("test") else l.get("test", "")
+        if ql in str(test).lower():
+            results.append({"type": "lab", "label": test, "sub": f"{l.get('value', '')} {l.get('unit', '')} · {l.get('date', '')}", "link": "/health"})
+
+    # Appointments
+    appts = await db.health_appointments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
+    for a in appts:
+        doctor = decrypt(a.get("doctor_name", "")) if a.get("doctor_name") else a.get("doctor_name", "")
+        if ql in str(doctor).lower() or ql in str(a.get("reason", "")).lower() or ql in str(a.get("speciality", "")).lower():
+            results.append({"type": "appointment", "label": doctor or "Appointment", "sub": f"{a.get('speciality', '')} · {a.get('appointment_date', '')}", "link": "/health"})
+
+    # Investments
+    invs = await db.investments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
+    for i in invs:
+        name = decrypt(i.get("name", "")) if i.get("name") else i.get("name", "")
+        if ql in str(name).lower() or ql in str(i.get("kind", "")).lower():
+            results.append({"type": "investment", "label": name, "sub": f"{i.get('kind', '')} · ₹{i.get('current_value', '') or ''}", "link": "/finance"})
+
+    return results[:12]
+
+
+
 # ── Extended Finance Summary ───────────────────────────────────────────────────
 @api.get("/finance/summary/extended")
 async def finance_summary_extended(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):

@@ -1,0 +1,104 @@
+{
+  "summary": "Iteration F - LifeOS Priority 4/3/10 features testing. Backend: 23/23 tests pass (after fixing crypto_service bug). Frontend: All major features verified. Fixed 2 bugs: (1) /api/search 500 error (crypto_service undefined), (2) Insurance form 422 error (missing policy_type default). All Health, Finance, Search, Dark Mode, Mobile Nav features working.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/search?q=",
+        "issue": "FIXED: NameError: crypto_service not defined. Used crypto_service.decrypt() but only decrypt() was imported. Fixed by replacing all 4 occurrences with decrypt().",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Finance.jsx - Insurance Add Form",
+        "issue": "FIXED: Insurance form submits policy_type as undefined (not in form state since user never changes the default select). Backend InsurancePolicyIn requires policy_type (non-optional). Fixed by adding `policy_type: body.policy_type || 'term'` in the POST call.",
+        "selector": "[data-testid='finance-add-button'] on Insurance tab",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Health - Vitals/Labs tabs",
+        "issues": ["Recharts warning: 'width(-1) and height(-1) of chart should be greater than 0' - console warnings appear on initial render before container is sized. Charts render correctly visually. Known Recharts/ResponsiveContainer issue when component mounts."]
+      },
+      {
+        "screen": "Finance - Budget form (Add Budget)",
+        "issues": ["Budget form uses browser's native month picker (input[type='month']) instead of custom UI - minor design inconsistency but functional"]
+      },
+      {
+        "screen": "Finance - Insurance rows",
+        "issues": ["Red highlight color (#FDF3F1) is very light and hard to distinguish from the page background (#F2F0E9) visually in screenshots. The bg color is technically correct per code but may need slightly stronger red tint for better visibility."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_f.py",
+    "/app/test_reports/pytest/pytest_results_f.xml"
+  ],
+  "action_items": [
+    "Recharts width/height warning: Consider adding minHeight to ResponsiveContainer wrappers in Health.jsx vitals/labs charts to avoid -1 dimension warnings on initial render",
+    "Finance.jsx: Check if similar default-select pattern affects other tabs (SIP status, RSU form fields). Though SIP/RSU models have Pydantic defaults so may not fail.",
+    "Insurance row red highlight: #FDF3F1 is very subtle against #F2F0E9 background - consider using a stronger red tint like bg-red-50 or adding a left-border indicator for better visual feedback"
+  ],
+  "critical_code_review_comments": [
+    "server.py global_search (lines 1858-1890): All 4 uses of crypto_service.decrypt() were undefined - fixed. crypto_service was never instantiated/imported as object; only decrypt() function was imported from services.crypto_service.",
+    "Finance.jsx insurance POST call (line 200): policy_type was not sent with default fallback. InsurancePolicyIn.policy_type is a required field with no default. Fixed by adding policy_type: body.policy_type || 'term'.",
+    "Pattern risk: Several Finance tabs use select fields where form state starts as {} (empty). The pattern `<select value={form.x || 'default'}>` shows a default in UI but form.x remains undefined until user changes it. On submit, body.x is undefined. This works ONLY when the Pydantic model has a Python default (like status='active'). It fails when the Pydantic field is required (no default). Review all select fields with required Pydantic fields."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (global_search function - replaced crypto_service.decrypt() with decrypt())",
+    "/app/frontend/src/pages/Finance.jsx (insurance POST call - added policy_type default fallback)"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 - after fixing crypto_service NameError)",
+    "frontend": "95% - all core features working, 2 bugs fixed in testing"
+  },
+  "features_tested": {
+    "health_4_stat_cards": "PASS - health-stat-vitals, health-stat-labs, health-stat-appts, health-stat-flagged all visible",
+    "health_vitals_sparklines": "PASS - Weight sparkline chart rendered with 3+ data points",
+    "health_labs_flagged_toggle": "PASS - labs-flagged-toggle button visible on Labs tab",
+    "health_labs_charts": "PASS - 3 lab charts rendered (HbA1c, HbA1c_TEST_APPLY, TSH) with ≥2 readings",
+    "health_appointments_split": "PASS - appts-upcoming-label visible; appts-past-label shown when past appointments exist",
+    "health_medications_subtitle": "PASS - medications-subtitle shows 'Derived from prescriptions up to'",
+    "finance_per_tab_summary": "PASS - Summary bar changes for Transactions/Investments/SIP/RSU/Loans/Insurance/Subscriptions/Budget",
+    "finance_budget_tab": "PASS - Budget vs Actuals tab (9th tab) visible, budget-view loaded, month picker present",
+    "finance_budget_add_form": "PASS - Add form has Category and Budgeted Amount (₹) fields",
+    "finance_insurance_expiry_highlight": "PASS - Row with policy_end within 30 days gets bg-[#FDF3F1] + border-[#C25942]/30",
+    "finance_insurance_summary_count": "PASS - Expiring ≤30 days count updates correctly in summary bar",
+    "global_search_button": "PASS - data-testid=global-search-button visible in header (hidden on mobile)",
+    "command_palette_open": "PASS - Opens on button click and Ctrl+K",
+    "command_palette_search": "PASS - Typing triggers /api/search, search-result-0 visible",
+    "command_palette_keyboard_nav": "PASS - ArrowDown/ArrowUp change active result, Enter navigates",
+    "command_palette_escape": "PASS - Escape key closes palette",
+    "dark_mode_toggle": "PASS - data-testid=dark-mode-toggle toggles dark class on html element",
+    "dark_mode_persist": "PASS - localStorage flos_dark set to 'true' on toggle",
+    "overview_no_error": "PASS - Overview loads, no formatINRCompact error, formatINR values shown correctly",
+    "mobile_bottom_nav": "PASS - data-testid=mobile-bottom-nav visible on 390px viewport with Overview/Finance/Health/Goals/Travel/Inbox",
+    "mobile_search_button": "PASS - data-testid=mobile-search-button visible on mobile, opens command palette"
+  },
+  "seed_data_creation": "Created and cleaned up: 3 weight vitals (71-73 kg), 2 test insurance policies. All test data removed after testing.",
+  "test_credentials": "Admin: anupam@familyos.app / Test@1234",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration F tested all Priority 3/4/10 LifeOS features. Backend 23/23 passing. Frontend all core flows verified. Fixed 2 bugs: (1) global_search crypto_service NameError in server.py - replaced with decrypt(). (2) Insurance form 422 - added policy_type default in Finance.jsx. Health sparklines/labs charts working. Finance budget tab and insurance expiry highlight working. Command palette search (after backend fix), dark mode, mobile nav all working. Recharts width/height warnings are cosmetic only. Pattern risk: Finance forms with required backend fields and select defaults (without form state init) may have similar 422 issues - review SIP/RSU submit handlers.",
+  "rca_of_issues": {
+    "crypto_service_error": {
+      "issue": "/api/search returns 500 for all queries",
+      "root_cause": "global_search function uses crypto_service.decrypt() but crypto_service is not defined anywhere. The import on line 27 is `from services.crypto_service import encrypt_doc, decrypt_doc, decrypt_list, encrypt, decrypt` - only the decrypt() function was imported, not a class instance named crypto_service.",
+      "reproduction": "GET /api/search?q=anything with valid auth → 500",
+      "fix_applied": "Replaced all 4 occurrences of crypto_service.decrypt(x) with decrypt(x) in global_search function",
+      "files_changed": ["/app/backend/server.py lines 1861, 1873, 1880, 1887"]
+    },
+    "insurance_form_422": {
+      "issue": "Insurance form in Finance tab fails with 422 on save",
+      "root_cause": "React form state initialized as {} (empty). The insurance type select shows 'term' as default via `value={form.policy_type || 'term'}` in JSX, BUT form.policy_type is never set in state unless user changes the select. On submit, body = {...form, ...} sends policy_type as undefined. FastAPI's InsurancePolicyIn.policy_type is required (non-optional, no default). Request fails with 422.",
+      "reproduction": "Go to Finance > Insurance tab > Add > fill only Insurer > Save → 422",
+      "fix_applied": "Added `policy_type: body.policy_type || 'term'` in the insurance api.post() call in Finance.jsx submitAdd()",
+      "files_changed": ["/app/frontend/src/pages/Finance.jsx line ~200"]
+    }
+  }
+}

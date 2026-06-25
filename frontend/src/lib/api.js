@@ -35,6 +35,16 @@ export const formatINR = (n) => {
 export const formatINRFull = (n) =>
   n === null || n === undefined || isNaN(n) ? "₹0" : `₹${Math.round(n).toLocaleString("en-IN")}`;
 
+export const formatINRCompact = (n) => {
+  if (n === null || n === undefined || isNaN(n)) return "₹0";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(0)}k`;
+  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
+};
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 export const formatDate = (d) => {
   if (!d) return "—";

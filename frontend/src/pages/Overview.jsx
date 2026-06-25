@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatINRFull, formatINRCompact } from "@/lib/utils";
+import { formatINRFull, formatINRCompact } from "@/lib/api";
 import { Link } from "react-router-dom";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { AlertTriangle, Activity, TrendingUp, Target, ChevronRight, ArrowRight } from "lucide-react";
