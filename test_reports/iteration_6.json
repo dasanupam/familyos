@@ -1,0 +1,76 @@
+{
+  "summary": "Iteration G - LifeOS Priority 6 (Plan Upload Goal Target Auto-Update) + Household Notifications testing. Fixed 1 backend bug: global_search used wrong MongoDB collections. All 16 backend tests pass (100%). All frontend features verified via Playwright.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/search?q=cholesterol",
+        "issue": "FIXED: global_search function used db.health_labs and db.health_appointments (non-existent collections). Actual collections are db.lab_results and db.appointments. Search for labs and appointments always returned 0 results. Fixed by changing collection names on lines 1895 and 1902 of server.py.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "FamilyOverview route",
+        "issue": "Test requirement states FamilyOverview is at '/family' but the React router maps FamilyOverview to '/household' (Household nav). The '/family' route maps to a different Family management component (member list with delete icons). The household-notifications section IS working correctly at /household. This is a route naming discrepancy in the test specification - not a code bug.",
+        "affected_selectors": ["[data-testid='household-notifications']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration_g.py",
+    "/app/test_reports/pytest/pytest_results_g.xml"
+  ],
+  "action_items": [
+    "DONE: Fixed global_search in server.py - changed db.health_labs to db.lab_results and db.health_appointments to db.appointments. Search for 'cholesterol' now returns 1 lab result.",
+    "INFO: FamilyOverview component is at /household route (not /family). household-notifications section is working correctly at /household showing Anupam's Cholesterol 220 mg/dL alert.",
+    "If main agent intended FamilyOverview at /family, update App.js route mapping. Currently: path='family' -> <Family/> and path='household' -> <FamilyOverview/>"
+  ],
+  "critical_code_review_comments": [
+    "server.py global_search (lines 1895-1906): Used incorrect MongoDB collection names db.health_labs and db.health_appointments. Actual data is in db.lab_results and db.appointments. This caused search to never return lab or appointment results. FIXED.",
+    "App.js routes: family -> Family component (member management), household -> FamilyOverview (with HouseholdNotifications). Test requirement says household-notifications should be at '/family' but the actual FamilyOverview is at '/household'. Verify intent with main agent.",
+    "DiffConfirmView plan_updates logic: When Emergency Fund checkbox is toggled off, button shows 'Apply N records + 1 goal update' (only remaining approved goal). This correctly counts approved goals."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (global_search - replaced db.health_labs with db.lab_results and db.health_appointments with db.appointments)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests pass, after fixing search collection names)",
+    "frontend": "100% - all features verified"
+  },
+  "features_tested": {
+    "alerts_health_category": "PASS - /api/alerts returns 1 health alert: Anupam's Cholesterol 220.0 mg/dL (high), type=lab_out_of_range, category=health, severity=error",
+    "inbox_apply_approved_goals": "PASS - approved_goal_names=['Emergency Fund'] updates Emergency Fund target correctly",
+    "inbox_apply_empty_approved": "PASS - approved_goal_names=[] does NOT update any goals",
+    "emergency_fund_target_500000": "PASS - Emergency Fund goal has target_amount=500000.0",
+    "search_cholesterol": "PASS (after fix) - /api/search?q=cholesterol returns 1 lab result: {type: 'lab', label: 'Cholesterol', sub: '220.0 mg/dL · 2026-06-25'}",
+    "household_notifications": "PASS - data-testid=household-notifications found on /household page showing 'Anupam Das's Cholesterol is 220.0 mg/dL (high)'",
+    "household_alert_item": "PASS - data-testid=household-alert-0 visible with correct content",
+    "universal_inbox_modal": "PASS - data-testid=universal-inbox-modal opens on header button click",
+    "diff_confirm_plan_updates_section": "PASS - data-testid=plan-updates-section visible when file with goals uploaded",
+    "plan_update_checkboxes": "PASS - data-testid=plan-update-check-emergency-fund toggleable",
+    "diff_apply_button_goal_text": "PASS - Shows 'Apply 4 records + 1 goal update' correctly",
+    "health_page": "PASS - data-testid=health-page with all 4 stat cards: health-stat-vitals (0 types), health-stat-labs (5 / 14 readings), health-stat-appts (0), health-stat-flagged (2)",
+    "finance_budget_tab": "PASS - data-testid=budget-view with native month picker (input[type='month'])",
+    "dark_mode_toggle": "PASS - data-testid=dark-mode-toggle adds/removes 'dark' class on html element, localStorage flos_dark set",
+    "global_search_button": "PASS - data-testid=global-search-button opens command palette (data-testid=command-palette)"
+  },
+  "seed_data_creation": "Uploaded test_plan_file.txt via dry_run mode to test DiffConfirmView - records NOT applied (user clicked Skip). Emergency Fund target remains at 500000.",
+  "test_credentials": "Admin: anupam@familyos.app / Test@1234",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration G tested Priority 6 (plan uploads + goal target auto-update) and Household Notifications. Backend 16/16 passing. Frontend all features verified. Fixed: global_search used wrong collection names (health_labs/health_appointments). Note: FamilyOverview (HouseholdNotifications) is at /household route, not /family. The /family route has a different Family management component. If any future test targets household-notifications, navigate to /household. DiffConfirmView plan_updates works end-to-end: upload file → dry_run → plan_updates shown with checkboxes → apply button shows correct count.",
+  "rca_of_issues": {
+    "search_wrong_collections": {
+      "issue": "/api/search?q=cholesterol returns 0 results",
+      "root_cause": "global_search function (server.py lines 1895-1906) queried db.health_labs and db.health_appointments which don't exist in MongoDB. The actual data is in db.lab_results (used throughout the app) and db.appointments. These collection names were introduced incorrectly when implementing global search.",
+      "reproduction": "GET /api/search?q=cholesterol with valid auth → [] (empty list)",
+      "fix_applied": "Changed db.health_labs to db.lab_results on line 1895 and db.health_appointments to db.appointments on line 1902",
+      "files_changed": ["/app/backend/server.py lines 1895, 1902"]
+    }
+  }
+}

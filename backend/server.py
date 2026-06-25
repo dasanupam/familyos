@@ -630,7 +630,22 @@ async def inbox_file(
         await db.documents.update_one({"id": doc_id}, {"$set": {
             "parsed_summary": parsed.get("summary"),
         }})
-        return {"document_id": doc_id, "parsed": parsed, "proposed": True}
+        # Compute plan_updates: diff proposed goal targets vs existing goals
+        plan_updates = []
+        for goal in parsed.get("goals", []) or []:
+            gname = goal.get("name")
+            if not gname:
+                continue
+            existing = await db.goals.find_one({"user_id": family_uid, "name": gname}, {"_id": 0})
+            plan_updates.append({
+                "goal_name": gname,
+                "goal_id": existing["id"] if existing else None,
+                "current_target": float((existing or {}).get("target_amount") or 0),
+                "proposed_target": float(goal.get("target_amount") or 0),
+                "action": "update" if existing else "create",
+            })
+        return {"document_id": doc_id, "parsed": parsed, "proposed": True,
+                "plan_updates": plan_updates if plan_updates else []}
 
     if parsed.get("confidence", 0) > 0 or parsed.get("module") != "generic":
         counts = await _apply_parsed(current_user, parsed, member_id, doc_id=doc_id)
@@ -651,6 +666,7 @@ class ApplyInboxIn(BaseModel):
     doc_id: Optional[str] = None
     member_id: Optional[str] = None
     selected_types: Optional[List[str]] = None
+    approved_goal_names: Optional[List[str]] = None  # goal names approved for target updates
 
 
 @api.post("/inbox/apply")
@@ -665,6 +681,13 @@ async def inbox_apply(body: ApplyInboxIn, current_user: dict = Depends(get_curre
         for t in ALL_RECORD_TYPES:
             if t not in body.selected_types:
                 parsed[t] = []
+
+    # Filter goals to only those explicitly approved for target update/create
+    if body.approved_goal_names is not None:
+        parsed["goals"] = [g for g in (parsed.get("goals") or []) if g.get("name") in body.approved_goal_names]
+    else:
+        # If no approved_goal_names specified but "goals" not in selected_types, goals were already cleared above
+        pass
 
     counts = await _apply_parsed(current_user, parsed, body.member_id, doc_id=body.doc_id)
     family_uid = get_family_user_id(current_user)
@@ -1696,8 +1719,9 @@ async def get_alerts(current_user: dict = Depends(get_current_user)):
     for mid in check_mids:
         mname = member_map.get(mid, "Family member")
 
-        # Lab results out of range
-        labs = await db.lab_results.find({"user_id": fuid, "member_id": mid}, {"_id": 0}).sort("date", -1).to_list(1000)
+        # Lab results out of range — include null member_id (admin self-data)
+        lab_q = {"user_id": fuid, "$or": [{"member_id": mid}, {"member_id": None}]} if mid == check_mids[0] else {"user_id": fuid, "member_id": mid}
+        labs = await db.lab_results.find(lab_q, {"_id": 0}).sort("date", -1).to_list(1000)
         seen: dict = {}
         for lab in labs:
             t = (lab.get("test") or "").strip()
@@ -1868,14 +1892,14 @@ async def global_search(q: str, current_user: dict = Depends(get_current_user)):
             results.append({"type": "goal", "label": g.get("name", ""), "sub": f"{g.get('domain', '')} · ₹{g.get('current', 0):,.0f} / ₹{g.get('target', 0):,.0f}", "link": "/goals"})
 
     # Labs
-    labs = await db.health_labs.find({"user_id": fuid}, {"_id": 0}).to_list(500)
+    labs = await db.lab_results.find({"user_id": fuid}, {"_id": 0}).to_list(500)
     for l in labs:
         test = decrypt(l.get("test", "")) if l.get("test") else l.get("test", "")
         if ql in str(test).lower():
             results.append({"type": "lab", "label": test, "sub": f"{l.get('value', '')} {l.get('unit', '')} · {l.get('date', '')}", "link": "/health"})
 
     # Appointments
-    appts = await db.health_appointments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
+    appts = await db.appointments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
     for a in appts:
         doctor = decrypt(a.get("doctor_name", "")) if a.get("doctor_name") else a.get("doctor_name", "")
         if ql in str(doctor).lower() or ql in str(a.get("reason", "")).lower() or ql in str(a.get("speciality", "")).lower():

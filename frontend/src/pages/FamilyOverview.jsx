@@ -3,7 +3,67 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatINRCompact } from "@/lib/utils";
 import { Link } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle, Bell, Activity } from "lucide-react";
+
+const SEVERITY_COLORS = {
+  error:   { bg: "#FDF3F1", border: "#C25942/30", text: "#C25942", icon: AlertTriangle },
+  warning: { bg: "#FFFBF0", border: "#D19B4C/30", text: "#D19B4C", icon: AlertTriangle },
+  info:    { bg: "#F0F6FF", border: "#3B82F6/20", text: "#3B82F6", icon: Bell },
+};
+
+function HouseholdNotifications() {
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get("/alerts").then((r) => {
+      const health = (r.data || []).filter((a) => a.category === "health");
+      setAlerts(health);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (alerts.length === 0) return null;
+
+  return (
+    <div className="card-surface p-5" data-testid="household-notifications">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-8 w-8 rounded-lg bg-[#C25942]/10 flex items-center justify-center">
+          <Activity className="h-4 w-4 text-[#C25942]" />
+        </div>
+        <div>
+          <div className="label-eyebrow">Household Health Alerts</div>
+          <div className="text-xs text-[#5E6A62]">{alerts.length} alert{alerts.length !== 1 ? "s" : ""} across your family</div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {alerts.slice(0, 8).map((alert, i) => {
+          const cfg = SEVERITY_COLORS[alert.severity] || SEVERITY_COLORS.info;
+          const Icon = cfg.icon;
+          return (
+            <Link to={alert.link || "/health"} key={i}
+              className="flex items-start gap-3 rounded-xl border px-3 py-2.5 hover:opacity-90 transition"
+              style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}
+              data-testid={`household-alert-${i}`}>
+              <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: cfg.text }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-[#111812] leading-snug">{alert.title}</div>
+                {alert.date && <div className="text-xs text-[#5E6A62] mt-0.5">{alert.date}</div>}
+              </div>
+              <span className="text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0 capitalize"
+                style={{ backgroundColor: `${cfg.text}15`, color: cfg.text }}>
+                {alert.severity}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+      {alerts.length > 8 && (
+        <div className="text-xs text-[#5E6A62] text-center mt-3">+{alerts.length - 8} more alerts in Health</div>
+      )}
+    </div>
+  );
+}
 
 const Avatar = ({ name, size = "lg" }) => {
   const initials = name?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "?";
@@ -94,6 +154,7 @@ export default function FamilyOverview() {
         <div className="font-display text-4xl mt-1">Family Overview</div>
         <p className="text-[#5E6A62] mt-1.5 text-sm">Live snapshot across all family members</p>
       </div>
+      <HouseholdNotifications />
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {members.map(m => <MemberCard key={m.id} member={m} />)}
       </div>

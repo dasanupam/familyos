@@ -42,17 +42,28 @@ function countProposed(parsed) {
 
 function DiffConfirmView({ result, busy, onApply, onSkip }) {
   const available = RECORD_TYPES.filter((t) => (result.parsed?.[t.key] || []).length > 0);
+  const planUpdates = result.plan_updates || [];
+
   const [selected, setSelected] = useState(
     Object.fromEntries(available.map((t) => [t.key, true]))
+  );
+  const [approvedGoals, setApprovedGoals] = useState(
+    Object.fromEntries(planUpdates.map((u) => [u.goal_name, true]))
   );
   const [expanded, setExpanded] = useState({});
 
   const toggle = (key) => setSelected((s) => ({ ...s, [key]: !s[key] }));
+  const toggleGoal = (name) => setApprovedGoals((s) => ({ ...s, [name]: !s[name] }));
   const toggleExpand = (key) => setExpanded((e) => ({ ...e, [key]: !e[key] }));
 
   const selectedTypes = available.filter((t) => selected[t.key]).map((t) => t.key);
+  const approvedGoalNames = planUpdates.filter((u) => approvedGoals[u.goal_name]).map((u) => u.goal_name);
   const totalSelected = selectedTypes.reduce((s, k) => s + (result.parsed?.[k] || []).length, 0);
   const isVision = result.parsed?._source === "vision";
+
+  const handleApply = () => {
+    onApply(selectedTypes, approvedGoalNames.length > 0 ? approvedGoalNames : null);
+  };
 
   return (
     <div className="space-y-4" data-testid="diff-confirm-view">
@@ -66,7 +77,8 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
           <p className="text-sm font-medium text-[#111812] leading-snug">{result.parsed?.summary}</p>
           <p className="text-xs text-[#5E6A62] mt-0.5">
             Found {countProposed(result.parsed)} records across {available.length} categor{available.length === 1 ? "y" : "ies"}.
-            Choose what to save:
+            {planUpdates.length > 0 && ` Also ${planUpdates.length} goal target update${planUpdates.length > 1 ? "s" : ""}.`}
+            {" "}Choose what to save:
           </p>
         </div>
       </div>
@@ -122,17 +134,51 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
             </div>
           );
         })}
+
+        {/* Plan updates section */}
+        {planUpdates.length > 0 && (
+          <div className="rounded-xl border border-[#D19B4C]/40 bg-[#D19B4C]/5 p-3" data-testid="plan-updates-section">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-[#D19B4C] uppercase tracking-wider">Goal Target Updates</span>
+              <span className="text-xs font-mono bg-[#D19B4C]/15 text-[#D19B4C] px-2 py-0.5 rounded-full">{planUpdates.length}</span>
+            </div>
+            <div className="space-y-2">
+              {planUpdates.map((u) => (
+                <div key={u.goal_name} className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition ${approvedGoals[u.goal_name] ? "border-[#D19B4C]/40 bg-white" : "border-[#E5E2DC] bg-white opacity-60"}`}
+                  data-testid={`plan-update-${u.goal_name.replace(/\s+/g, "-").toLowerCase()}`}>
+                  <input
+                    type="checkbox"
+                    checked={approvedGoals[u.goal_name]}
+                    onChange={() => toggleGoal(u.goal_name)}
+                    className="accent-[#D19B4C] h-4 w-4"
+                    data-testid={`plan-update-check-${u.goal_name.replace(/\s+/g, "-").toLowerCase()}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-[#111812] truncate">{u.goal_name}</div>
+                    <div className="text-xs text-[#5E6A62] flex items-center gap-1.5">
+                      <span className="line-through">₹{u.current_target.toLocaleString("en-IN")}</span>
+                      <span className="text-[#D19B4C]">→</span>
+                      <span className="font-medium text-[#111812]">₹{u.proposed_target.toLocaleString("en-IN")}</span>
+                      <span className="bg-[#D19B4C]/15 text-[#D19B4C] px-1.5 rounded text-xs">{u.action}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3 pt-1">
         <button
-          onClick={() => onApply(selectedTypes)}
-          disabled={busy || totalSelected === 0}
+          onClick={handleApply}
+          disabled={busy || (totalSelected === 0 && approvedGoalNames.length === 0)}
           data-testid="diff-apply-button"
           className="flex-1 flex items-center justify-center gap-2 bg-[#184A31] hover:bg-[#113523] text-white py-2.5 rounded-full text-sm font-medium transition disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Apply {totalSelected} record{totalSelected !== 1 ? "s" : ""}
+          {approvedGoalNames.length > 0 && ` + ${approvedGoalNames.length} goal update${approvedGoalNames.length !== 1 ? "s" : ""}`}
         </button>
         <button
           onClick={onSkip}
@@ -244,7 +290,7 @@ export default function UniversalInbox({ open, onClose }) {
   };
 
   // ── Apply user-confirmed records ──
-  const applyProposed = async (selectedTypes) => {
+  const applyProposed = async (selectedTypes, approvedGoalNames) => {
     if (!proposedResult) return;
     setBusy(true);
     try {
@@ -253,6 +299,7 @@ export default function UniversalInbox({ open, onClose }) {
         doc_id: proposedResult.document_id,
         member_id: memberIdParam,
         selected_types: selectedTypes,
+        approved_goal_names: approvedGoalNames,
       });
       setLastResult({ parsed: proposedResult.parsed, counts: data.counts, document_id: proposedResult.document_id });
       setProposedResult(null);
