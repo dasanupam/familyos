@@ -325,9 +325,6 @@ async def seed_family_data() -> None:
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @api.post("/auth/register")
 async def register(body: RegisterIn):
-    ALLOWED_EMAILS = {m["email"] for m in SEED_FAMILY}
-    if body.email.lower() not in ALLOWED_EMAILS:
-        raise HTTPException(status_code=403, detail="Registration is closed for this app.")
     if await db.users.find_one({"email": body.email.lower()}):
         raise HTTPException(status_code=400, detail="Email already registered")
     uid = new_id()
@@ -1980,7 +1977,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     logger.info("FamilyOS backend started")
-    await seed_family_data()
+    pass  # no seed data
 
 
 @app.on_event("shutdown")

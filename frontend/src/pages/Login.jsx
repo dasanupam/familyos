@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useNavigate, Link } from "react-router-dom";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -9,6 +9,7 @@ export default function Login() {
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
@@ -77,16 +78,34 @@ export default function Login() {
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Password</label>
-              <input
-                data-testid="login-password-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full border border-[#E5E2DC] bg-white px-4 py-3 rounded-xl focus:outline-none focus:border-[#184A31] transition"
-                placeholder="••••••••"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="label-eyebrow">Password</label>
+                <button
+                  type="button"
+                  onClick={() => toast.info("Contact the app admin to reset your password.")}
+                  className="text-xs text-[#184A31] hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  data-testid="login-password-input"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full border border-[#E5E2DC] bg-white px-4 py-3 pr-12 rounded-xl focus:outline-none focus:border-[#184A31] transition"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5E6A62] hover:text-[#184A31]"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <button
               data-testid="login-submit-button"
