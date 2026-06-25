@@ -1,3 +1,7 @@
+https://raw.githubusercontent.com/dasanupam/familyos/main/backend/server.py
+→ https://raw.githubusercontent.com/dasanupam/familyos/main/backend/server.py
+Content-Type: text/plain; charset=utf-8
+
 """Family Life OS – FastAPI backend v2.
 Role-Based Access Control + Service Abstraction Layer.
 """
@@ -11,6 +15,8 @@ from pathlib import Path
 from datetime import datetime, timezone, date
 from typing import Optional, List
 from io import StringIO
+import mimetypes
+from collections import defaultdict
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Response, Header
 from starlette.middleware.cors import CORSMiddleware
@@ -22,7 +28,6 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 from auth import hash_password, verify_password, create_token, decode_token
-from storage import init_storage, guess_mime
 from services.storage_service import upload_file, get_file_content
 from services.crypto_service import encrypt_doc, decrypt_doc, decrypt_list, encrypt, decrypt
 from ai_parser import parse_universal, parse_image_file
@@ -31,12 +36,33 @@ from ai_parser import parse_universal, parse_image_file
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# ── Rate limiting (in-memory) ──────────────────────────────────────────────
+_rate_store: dict = defaultdict(list)
+
+def _rate_check(key: str, max_calls: int, window_sec: int = 60):
+    from datetime import timedelta
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=window_sec)
+    _rate_store[key] = [t for t in _rate_store[key] if t > cutoff]
+    if len(_rate_store[key]) >= max_calls:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again later.")
+    _rate_store[key].append(now)
+
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 app = FastAPI(title="Family Life OS")
 api = APIRouter(prefix="/api")
+
+_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def now_iso() -> str:
@@ -303,6 +329,9 @@ async def seed_family_data() -> None:
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @api.post("/auth/register")
 async def register(body: RegisterIn):
+    ALLOWED_EMAILS = {m["email"] for m in SEED_FAMILY}
+    if body.email.lower() not in ALLOWED_EMAILS:
+        raise HTTPException(status_code=403, detail="Registration is closed for this app.")
     if await db.users.find_one({"email": body.email.lower()}):
         raise HTTPException(status_code=400, detail="Email already registered")
     uid = new_id()
@@ -328,6 +357,7 @@ async def register(body: RegisterIn):
 
 @api.post("/auth/login")
 async def login(body: LoginIn):
+    _rate_check(f"login:{body.email.lower()}", max_calls=10, window_sec=300)
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -583,11 +613,14 @@ async def inbox_file(
     current_user: dict = Depends(get_current_user),
 ):
     """Upload + parse a document. dry_run=true returns proposed records without saving them."""
+    _rate_check(f"inbox:{current_user['id']}", max_calls=10, window_sec=60)
     is_dry_run = dry_run in ("true", "1", "yes")
     data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 20MB.")
     filename = file.filename or "upload"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    content_type = file.content_type or guess_mime(filename)
+    content_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     family_uid = get_family_user_id(current_user)
 
     try:
@@ -1950,10 +1983,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    try:
-        init_storage()
-    except Exception as e:
-        logger.error(f"Storage init failed: {e}")
+    logger.info("FamilyOS backend started")
     await seed_family_data()
 
 
