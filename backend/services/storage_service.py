@@ -1,40 +1,78 @@
-"""File storage service abstraction layer.
+"""File storage service — Google Drive via OAuth refresh token (free tier).
 
-All file I/O goes through here. Never call storage.put_object / get_object
-directly from other files — use this module instead.
+Required env vars:
+  GOOGLE_CLIENT_ID
+  GOOGLE_CLIENT_SECRET
+  GOOGLE_REFRESH_TOKEN
+  GOOGLE_DRIVE_FOLDER_ID
 
-To migrate to Google Drive (GOOGLE_DRIVE_REFRESH_TOKEN env var), swap
-this file only. Files will be stored in a 'LifeOS_Uploads' folder.
+Swap boundary: to change storage provider, only edit this file.
 """
 import os
+import io
 import uuid
 import logging
-from storage import put_object, get_object, APP_NAME
 
 logger = logging.getLogger(__name__)
 
+FOLDER_ID = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
+
+
+def _get_drive_service():
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ.get("GOOGLE_REFRESH_TOKEN"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    )
+    if not creds.valid:
+        creds.refresh(Request())
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
 
 async def upload_file(file_bytes: bytes, filename: str, mime_type: str, user_id: str = "shared") -> str:
-    """Upload file bytes and return a file_id (storage path string)."""
+    """Upload file bytes to Google Drive, return the Drive file ID."""
+    from googleapiclient.http import MediaIoBaseUpload
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    file_id = f"{APP_NAME}/uploads/{user_id}/{uuid.uuid4()}.{ext}"
-    put_object(file_id, file_bytes, mime_type)
-    return file_id
+    unique_name = f"{uuid.uuid4()}.{ext}"
+    service = _get_drive_service()
+    file_metadata = {"name": unique_name, "parents": [FOLDER_ID]}
+    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=False)
+    file = service.files().create(
+        body=file_metadata, media_body=media, fields="id"
+    ).execute()
+    return file["id"]
 
 
 async def get_file_content(file_id: str):
-    """Return (bytes, content_type) for the given file_id / storage path."""
-    return get_object(file_id)
+    """Return (bytes, content_type) for the given Drive file ID."""
+    from googleapiclient.http import MediaIoBaseDownload
+    service = _get_drive_service()
+    meta = service.files().get(fileId=file_id, fields="mimeType").execute()
+    mime = meta.get("mimeType", "application/octet-stream")
+    request = service.files().get_media(fileId=file_id)
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    return buf.getvalue(), mime
 
 
 async def get_file_url(file_id: str) -> str:
-    """Return a reference for the file.
-    Current backend serves files via the /api/documents/{id}/download endpoint.
-    """
-    return file_id
+    """Return a Google Drive view URL for the file."""
+    return f"https://drive.google.com/file/d/{file_id}/view"
 
 
 async def delete_file(file_id: str) -> None:
-    """Delete a file. Currently a no-op; Emergent Object Storage does not
-    expose a delete API. Swap this file to enable delete on migration."""
-    logger.info(f"delete_file called for {file_id} — no-op in current backend")
+    """Delete a file from Google Drive."""
+    try:
+        service = _get_drive_service()
+        service.files().delete(fileId=file_id).execute()
+    except Exception as e:
+        logger.warning(f"delete_file failed for {file_id}: {e}")
