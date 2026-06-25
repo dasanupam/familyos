@@ -1156,8 +1156,461 @@ async def investments_xirr(current_user: dict = Depends(get_current_user)):
             "total_gain": total_cur - total_inv, "overall_pct": overall}
 
 
-# ── App setup ─────────────────────────────────────────────────────────────────
+# ── RSU Grants ────────────────────────────────────────────────────────────────
+class RsuGrantIn(BaseModel):
+    member_id: str
+    company: str
+    grant_date: str
+    total_units: float
+    cliff_months: int = 12
+    vest_period_months: int = 48
+    current_price: Optional[float] = None
+    vested_units: Optional[float] = 0.0
+    unvested_units: Optional[float] = None
+    notes: Optional[str] = None
+
+@api.get("/finance/rsu")
+async def list_rsu(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    rows = await db.rsu_grants.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+    for r in rows:
+        unvested = r.get("unvested_units") or (r.get("total_units", 0) - (r.get("vested_units") or 0))
+        r["projected_value"] = round(unvested * (r.get("current_price") or 0), 2)
+    return rows
+
+@api.post("/finance/rsu")
+async def create_rsu(body: RsuGrantIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.rsu_grants.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/rsu/{rid}")
+async def update_rsu(rid: str, body: RsuGrantIn, current_user: dict = Depends(get_current_user)):
+    await db.rsu_grants.update_one({"id": rid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.rsu_grants.find_one({"id": rid}, {"_id": 0})
+
+@api.delete("/finance/rsu/{rid}")
+async def delete_rsu(rid: str, current_user: dict = Depends(get_current_user)):
+    await db.rsu_grants.delete_one({"id": rid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── SIP Tracker ───────────────────────────────────────────────────────────────
+class SipEntryIn(BaseModel):
+    member_id: str
+    fund_name: str
+    folio_number: Optional[str] = None
+    monthly_amount: float
+    start_date: str
+    status: str = "active"
+    total_invested: Optional[float] = None
+    current_value: Optional[float] = None
+    xirr: Optional[float] = None
+    last_nav_date: Optional[str] = None
+
+@api.get("/finance/sip")
+async def list_sip(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.sip_entries.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+
+@api.post("/finance/sip")
+async def create_sip(body: SipEntryIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.sip_entries.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/sip/{sid}")
+async def update_sip(sid: str, body: SipEntryIn, current_user: dict = Depends(get_current_user)):
+    await db.sip_entries.update_one({"id": sid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.sip_entries.find_one({"id": sid}, {"_id": 0})
+
+@api.delete("/finance/sip/{sid}")
+async def delete_sip(sid: str, current_user: dict = Depends(get_current_user)):
+    await db.sip_entries.delete_one({"id": sid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Tax Records ───────────────────────────────────────────────────────────────
+class TaxRecordIn(BaseModel):
+    member_id: str
+    financial_year: str
+    income_salary: Optional[float] = None
+    income_other: Optional[float] = None
+    tds_deducted: Optional[float] = None
+    advance_tax_paid: Optional[float] = None
+    stcg: Optional[float] = None
+    ltcg: Optional[float] = None
+    estimated_liability: Optional[float] = None
+    itr_status: str = "not_filed"
+    itr_filing_date: Optional[str] = None
+    notes: Optional[str] = None
+
+@api.get("/finance/tax")
+async def list_tax(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.tax_records.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("financial_year", -1).to_list(50)
+
+@api.get("/finance/tax/current-year")
+async def current_year_tax(current_user: dict = Depends(get_current_user)):
+    today = date.today()
+    fy = f"{today.year}-{str(today.year+1)[2:]}" if today.month >= 4 else f"{today.year-1}-{str(today.year)[2:]}"
+    fuid = get_family_user_id(current_user)
+    return await db.tax_records.find_one({"user_id": fuid, "financial_year": fy}, {"_id": 0})
+
+@api.post("/finance/tax")
+async def create_tax(body: TaxRecordIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.tax_records.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/tax/{tid}")
+async def update_tax(tid: str, body: TaxRecordIn, current_user: dict = Depends(get_current_user)):
+    await db.tax_records.update_one({"id": tid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.tax_records.find_one({"id": tid}, {"_id": 0})
+
+@api.delete("/finance/tax/{tid}")
+async def delete_tax(tid: str, current_user: dict = Depends(get_current_user)):
+    await db.tax_records.delete_one({"id": tid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Insurance Policies ────────────────────────────────────────────────────────
+class InsurancePolicyIn(BaseModel):
+    member_id: str
+    policy_type: str
+    insurer: str
+    policy_number: Optional[str] = None
+    sum_assured: Optional[float] = None
+    annual_premium: Optional[float] = None
+    premium_due_date: Optional[str] = None
+    policy_start: Optional[str] = None
+    policy_end: Optional[str] = None
+    nominee: Optional[str] = None
+    document_drive_id: Optional[str] = None
+    notes: Optional[str] = None
+
+@api.get("/finance/insurance")
+async def list_insurance(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.insurance_policies.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+
+@api.post("/finance/insurance")
+async def create_insurance(body: InsurancePolicyIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.insurance_policies.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/insurance/{iid}")
+async def update_insurance(iid: str, body: InsurancePolicyIn, current_user: dict = Depends(get_current_user)):
+    await db.insurance_policies.update_one({"id": iid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.insurance_policies.find_one({"id": iid}, {"_id": 0})
+
+@api.delete("/finance/insurance/{iid}")
+async def delete_insurance(iid: str, current_user: dict = Depends(get_current_user)):
+    await db.insurance_policies.delete_one({"id": iid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Subscriptions ─────────────────────────────────────────────────────────────
+class SubscriptionIn(BaseModel):
+    member_id: str
+    name: str
+    category: str = "other"
+    amount: float
+    billing_cycle: str = "monthly"
+    next_billing_date: Optional[str] = None
+    status: str = "active"
+    notes: Optional[str] = None
+
+@api.get("/finance/subscriptions")
+async def list_subscriptions(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.subscriptions.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+
+@api.post("/finance/subscriptions")
+async def create_subscription(body: SubscriptionIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.subscriptions.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/subscriptions/{sid}")
+async def update_subscription(sid: str, body: SubscriptionIn, current_user: dict = Depends(get_current_user)):
+    await db.subscriptions.update_one({"id": sid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.subscriptions.find_one({"id": sid}, {"_id": 0})
+
+@api.delete("/finance/subscriptions/{sid}")
+async def delete_subscription(sid: str, current_user: dict = Depends(get_current_user)):
+    await db.subscriptions.delete_one({"id": sid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Budget ────────────────────────────────────────────────────────────────────
+class BudgetIn(BaseModel):
+    member_id: str
+    month: str  # YYYY-MM
+    category: str
+    budgeted_amount: float
+
+@api.get("/finance/budget")
+async def list_budgets(month: Optional[str] = None, member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    q = resolve_member_filter(current_user, member_id)
+    if month:
+        q["month"] = month
+    budgets = await db.budgets.find(q, {"_id": 0}).to_list(500)
+    # Compute actual_amount from transactions for each budget row
+    for b in budgets:
+        tx_q = {"user_id": b["user_id"], "member_id": b["member_id"],
+                "category": b["category"], "type": "expense"}
+        txs = await db.transactions.find(tx_q, {"_id": 0, "amount": 1, "date": 1}).to_list(1000)
+        b["actual_amount"] = sum(t["amount"] for t in txs if t.get("date", "")[:7] == b["month"])
+    return budgets
+
+@api.post("/finance/budget")
+async def create_budget(body: BudgetIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.budgets.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/finance/budget/{bid}")
+async def update_budget(bid: str, body: BudgetIn, current_user: dict = Depends(get_current_user)):
+    await db.budgets.update_one({"id": bid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.budgets.find_one({"id": bid}, {"_id": 0})
+
+@api.delete("/finance/budget/{bid}")
+async def delete_budget(bid: str, current_user: dict = Depends(get_current_user)):
+    await db.budgets.delete_one({"id": bid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Appointments ──────────────────────────────────────────────────────────────
+class AppointmentIn(BaseModel):
+    member_id: str
+    doctor_name: str
+    speciality: Optional[str] = None
+    appointment_date: str
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    follow_up_date: Optional[str] = None
+    linked_lab_result_ids: Optional[List[str]] = []
+
+@api.get("/health/appointments")
+async def list_appointments(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.appointments.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("appointment_date", -1).to_list(500)
+
+@api.post("/health/appointments")
+async def create_appointment(body: AppointmentIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.appointments.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/health/appointments/{aid}")
+async def update_appointment(aid: str, body: AppointmentIn, current_user: dict = Depends(get_current_user)):
+    await db.appointments.update_one({"id": aid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.appointments.find_one({"id": aid}, {"_id": 0})
+
+@api.delete("/health/appointments/{aid}")
+async def delete_appointment(aid: str, current_user: dict = Depends(get_current_user)):
+    await db.appointments.delete_one({"id": aid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Fitness Logs ──────────────────────────────────────────────────────────────
+class FitnessLogIn(BaseModel):
+    member_id: str
+    date: str
+    weight_kg: Optional[float] = None
+    steps: Optional[int] = None
+    workout_type: Optional[str] = None
+    duration_mins: Optional[int] = None
+    notes: Optional[str] = None
+
+@api.get("/health/fitness")
+async def list_fitness(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.fitness_logs.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+
+@api.post("/health/fitness")
+async def create_fitness(body: FitnessLogIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.fitness_logs.insert_one(d); d.pop("_id", None); return d
+
+@api.delete("/health/fitness/{fid}")
+async def delete_fitness(fid: str, current_user: dict = Depends(get_current_user)):
+    await db.fitness_logs.delete_one({"id": fid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Vaccinations ──────────────────────────────────────────────────────────────
+class VaccinationIn(BaseModel):
+    member_id: str
+    vaccine_name: str
+    date_administered: str
+    dose_number: Optional[int] = 1
+    next_due_date: Optional[str] = None
+    administered_by: Optional[str] = None
+    notes: Optional[str] = None
+
+@api.get("/health/vaccinations")
+async def list_vaccinations(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.vaccinations.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date_administered", -1).to_list(500)
+
+@api.post("/health/vaccinations")
+async def create_vaccination(body: VaccinationIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.vaccinations.insert_one(d); d.pop("_id", None); return d
+
+@api.delete("/health/vaccinations/{vid}")
+async def delete_vaccination(vid: str, current_user: dict = Depends(get_current_user)):
+    await db.vaccinations.delete_one({"id": vid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Identity Documents ────────────────────────────────────────────────────────
+class IdentityDocIn(BaseModel):
+    member_id: str
+    doc_type: str  # aadhaar/pan/passport/driving_license/visa/other
+    doc_number: Optional[str] = None
+    issued_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    issued_by: Optional[str] = None
+    drive_file_id: Optional[str] = None
+
+@api.get("/identity")
+async def list_identity(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.identity_documents.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+
+@api.post("/identity")
+async def create_identity(body: IdentityDocIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.identity_documents.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/identity/{did}")
+async def update_identity(did: str, body: IdentityDocIn, current_user: dict = Depends(get_current_user)):
+    await db.identity_documents.update_one({"id": did, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.identity_documents.find_one({"id": did}, {"_id": 0})
+
+@api.delete("/identity/{did}")
+async def delete_identity(did: str, current_user: dict = Depends(get_current_user)):
+    await db.identity_documents.delete_one({"id": did, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Properties & Assets ───────────────────────────────────────────────────────
+class PropertyIn(BaseModel):
+    member_id: str
+    property_type: str  # residential/commercial/land/vehicle
+    name: str
+    address: Optional[str] = None
+    purchase_date: Optional[str] = None
+    purchase_price: Optional[float] = None
+    current_estimated_value: Optional[float] = None
+    rental_income_monthly: Optional[float] = None
+    loan_linked_id: Optional[str] = None
+    notes: Optional[str] = None
+
+@api.get("/property")
+async def list_property(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    return await db.properties.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+
+@api.post("/property")
+async def create_property(body: PropertyIn, current_user: dict = Depends(get_current_user)):
+    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    await db.properties.insert_one(d); d.pop("_id", None); return d
+
+@api.put("/property/{pid}")
+async def update_property(pid: str, body: PropertyIn, current_user: dict = Depends(get_current_user)):
+    await db.properties.update_one({"id": pid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
+    return await db.properties.find_one({"id": pid}, {"_id": 0})
+
+@api.delete("/property/{pid}")
+async def delete_property(pid: str, current_user: dict = Depends(get_current_user)):
+    await db.properties.delete_one({"id": pid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Emergency Fund ────────────────────────────────────────────────────────────
+class EmergencyFundIn(BaseModel):
+    member_id: str
+    target_months: int = 6
+    monthly_expense_estimate: float
+    current_amount: float
+    account_name: Optional[str] = None
+
+@api.get("/property/emergency-fund")
+async def list_emergency_fund(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    rows = await db.emergency_fund.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(20)
+    for r in rows:
+        exp = r.get("monthly_expense_estimate") or 1
+        r["target_amount"]    = r["target_months"] * exp
+        r["coverage_months"]  = round(r.get("current_amount", 0) / exp, 1)
+    return rows
+
+@api.post("/property/emergency-fund")
+async def create_emergency_fund(body: EmergencyFundIn, current_user: dict = Depends(get_current_user)):
+    fuid = get_family_user_id(current_user)
+    d = {"id": new_id(), "user_id": fuid, **body.model_dump(), "last_updated": today_str(), "created_at": now_iso()}
+    await db.emergency_fund.insert_one(d); d.pop("_id", None)
+    exp = body.monthly_expense_estimate or 1
+    d["target_amount"]   = body.target_months * exp
+    d["coverage_months"] = round(body.current_amount / exp, 1)
+    return d
+
+@api.put("/property/emergency-fund/{eid}")
+async def update_emergency_fund(eid: str, body: EmergencyFundIn, current_user: dict = Depends(get_current_user)):
+    upd = {**body.model_dump(), "last_updated": today_str()}
+    await db.emergency_fund.update_one({"id": eid, "user_id": get_family_user_id(current_user)}, {"$set": upd})
+    return await db.emergency_fund.find_one({"id": eid}, {"_id": 0})
+
+@api.delete("/property/emergency-fund/{eid}")
+async def delete_emergency_fund(eid: str, current_user: dict = Depends(get_current_user)):
+    await db.emergency_fund.delete_one({"id": eid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
+
+
+# ── Alerts ────────────────────────────────────────────────────────────────────
+@api.get("/alerts")
+async def get_alerts(current_user: dict = Depends(get_current_user)):
+    from datetime import timedelta
+    fuid = get_family_user_id(current_user)
+    today_d = date.today()
+    alerts = []
+
+    # Insurance expiring in 60 days
+    cutoff_60 = (today_d + timedelta(days=60)).isoformat()
+    ins = await db.insurance_policies.find({"user_id": fuid, "policy_end": {"$lte": cutoff_60, "$gte": today_d.isoformat()}}, {"_id": 0}).to_list(100)
+    for i in ins:
+        alerts.append({"type": "insurance_expiry", "severity": "warning",
+                        "title": f"Insurance expiring: {i['insurer']} {i['policy_type']}",
+                        "date": i["policy_end"], "id": i["id"]})
+
+    # Identity docs expiring in 90 days
+    cutoff_90 = (today_d + timedelta(days=90)).isoformat()
+    alert_types = ("passport", "visa", "driving_license")
+    ids = await db.identity_documents.find({"user_id": fuid, "doc_type": {"$in": alert_types},
+                                             "expiry_date": {"$lte": cutoff_90, "$gte": today_d.isoformat()}}, {"_id": 0}).to_list(100)
+    for i in ids:
+        alerts.append({"type": "doc_expiry", "severity": "error" if i["expiry_date"] <= (today_d + timedelta(days=30)).isoformat() else "warning",
+                        "title": f"{i['doc_type'].replace('_',' ').title()} expiring: {i.get('doc_number','')}",
+                        "date": i["expiry_date"], "id": i["id"]})
+
+    # Upcoming appointments (next 7 days)
+    cutoff_7 = (today_d + timedelta(days=7)).isoformat()
+    appts = await db.appointments.find({"user_id": fuid, "appointment_date": {"$gte": today_d.isoformat(), "$lte": cutoff_7}}, {"_id": 0}).to_list(20)
+    for a in appts:
+        alerts.append({"type": "appointment", "severity": "info",
+                        "title": f"Appointment: {a['doctor_name']} ({a.get('speciality','')})",
+                        "date": a["appointment_date"], "id": a["id"]})
+
+    # Vaccination due in 30 days
+    cutoff_30 = (today_d + timedelta(days=30)).isoformat()
+    vacs = await db.vaccinations.find({"user_id": fuid, "next_due_date": {"$gte": today_d.isoformat(), "$lte": cutoff_30}}, {"_id": 0}).to_list(20)
+    for v in vacs:
+        alerts.append({"type": "vaccination_due", "severity": "info",
+                        "title": f"Vaccination due: {v['vaccine_name']}",
+                        "date": v["next_due_date"], "id": v["id"]})
+
+    alerts.sort(key=lambda x: x["date"])
+    return alerts
+
+
+# ── Extended Finance Summary ───────────────────────────────────────────────────
+@api.get("/finance/summary/extended")
+async def finance_summary_extended(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    q = resolve_member_filter(current_user, member_id)
+    base = await _finance_summary_q(q)
+    sips = await db.sip_entries.find(q, {"_id": 0}).to_list(200)
+    sip_total_invested = sum(s.get("total_invested") or 0 for s in sips)
+    sip_current_value  = sum(s.get("current_value") or 0 for s in sips)
+    rsus = await db.rsu_grants.find(q, {"_id": 0}).to_list(200)
+    rsu_unvested_value = sum(
+        ((r.get("unvested_units") or (r.get("total_units",0) - (r.get("vested_units") or 0))) *
+         (r.get("current_price") or 0))
+        for r in rsus
+    )
+    ins = await db.insurance_policies.find(q, {"_id": 0}).to_list(200)
+    insurance_total_coverage = sum(i.get("sum_assured") or 0 for i in ins)
+    return {**base, "sip_total_invested": sip_total_invested, "sip_current_value": sip_current_value,
+            "rsu_unvested_value": rsu_unvested_value, "insurance_total_coverage": insurance_total_coverage}
+
+
+# ── Mount + middleware ─────────────────────────────────────────────────────────
 app.include_router(api)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Wallet, HeartPulse, Target, FileText,
-  Users, LogOut, Sparkles, Inbox, Plane, Briefcase,
+  Users, LogOut, Sparkles, Inbox, Plane, Briefcase, Home,
 } from "lucide-react";
 import UniversalInbox from "@/components/UniversalInbox";
 import FamilySwitcher from "@/components/FamilySwitcher";
@@ -16,6 +16,7 @@ const ADMIN_NAV = [
   { to: "/travel",    label: "Travel",      icon: Plane },
   { to: "/career",    label: "Career",      icon: Briefcase },
   { to: "/goals",     label: "Goals & FIRE",icon: Target },
+  { to: "/property",  label: "Property",    icon: Home },
   { to: "/documents", label: "Documents",   icon: FileText },
   { to: "/family",    label: "Family",      icon: Users },
 ];
@@ -27,6 +28,7 @@ const MEMBER_NAV = [
   { to: "/travel",    label: "Travel",      icon: Plane },
   { to: "/career",    label: "Career",      icon: Briefcase },
   { to: "/goals",     label: "Goals & FIRE",icon: Target },
+  { to: "/property",  label: "Property",    icon: Home },
   { to: "/documents", label: "Documents",   icon: FileText },
 ];
 

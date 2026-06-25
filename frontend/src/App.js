@@ -14,6 +14,7 @@ import Family from "@/pages/Family";
 import Travel from "@/pages/Travel";
 import Career from "@/pages/Career";
 import FamilyOverview from "@/pages/FamilyOverview";
+import Property from "@/pages/Property";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="travel"    element={<Travel />} />
             <Route path="career"    element={<Career />} />
             <Route path="household" element={<FamilyOverview />} />
+            <Route path="property"  element={<Property />} />
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Plus, Trash2, Briefcase, Award, TrendingUp, Zap } from "lucide-react";
+import { Plus, Trash2, Briefcase, Award, TrendingUp, Zap, Edit3 } from "lucide-react";
 import { Modal, Field, SelectMember } from "@/pages/Finance";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import { toast } from "sonner";

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { TrendingUp, TrendingDown, Wallet, Target, Activity, Sparkles, ArrowUpRight, FileText } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Target, Activity, Sparkles, ArrowUpRight, FileText, AlertTriangle, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid } from "recharts";
 import { Link } from "react-router-dom";
 
@@ -17,11 +17,13 @@ export default function Overview() {
   const { activeMember } = useAuth();
   const [data, setData] = useState(null);
   const [trend, setTrend] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
     const m = activeMember === "family" ? "" : `?member_id=${activeMember}`;
     api.get(`/dashboard/overview${m}`).then((r) => setData(r.data)).catch(() => {});
     api.get(`/finance/monthly-trend${m}`).then((r) => setTrend(r.data)).catch(() => {});
+    api.get("/alerts").then((r) => setAlerts(r.data)).catch(() => {});
     // Auto-snapshot net-worth on every dashboard load (idempotent per day)
     api.post("/finance/snapshot").catch(() => {});
     api.get("/finance/net-worth-series").then((r) => setNwSeries(r.data)).catch(() => {});
@@ -42,6 +44,21 @@ export default function Overview() {
           Everything, at a glance.
         </h1>
       </div>
+
+      {/* Alerts banner */}
+      {alerts.length > 0 && (
+        <div className="card-surface border border-[#D19B4C]/40 p-4 flex flex-col gap-2" data-testid="alerts-banner">
+          <div className="flex items-center gap-2 mb-1"><Bell className="h-4 w-4 text-[#D19B4C]" /><span className="label-eyebrow text-[#D19B4C]">{alerts.length} Alert{alerts.length > 1 ? "s" : ""}</span></div>
+          {alerts.slice(0, 3).map((a, i) => (
+            <div key={i} className={`flex items-start gap-2 text-sm py-1 border-b border-[#E5E2DC] last:border-0`}>
+              <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${a.severity === "error" ? "text-[#C25942]" : "text-[#D19B4C]"}`} />
+              <div className="flex-1">{a.title}</div>
+              <div className="text-xs text-[#5E6A62]">{a.date}</div>
+            </div>
+          ))}
+          {alerts.length > 3 && <div className="text-xs text-[#5E6A62]">+{alerts.length - 3} more alerts</div>}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
         <Stat label="Net worth" value={formatINR(summary.net_worth)}

@@ -34,3 +34,12 @@ export const formatINR = (n) => {
 
 export const formatINRFull = (n) =>
   n === null || n === undefined || isNaN(n) ? "₹0" : `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+export const formatDate = (d) => {
+  if (!d) return "—";
+  try {
+    const dt = new Date(d + (d.length === 10 ? "T00:00:00" : ""));
+    return `${String(dt.getDate()).padStart(2,"0")} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+  } catch { return d; }
+};
