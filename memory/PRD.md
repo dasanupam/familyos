@@ -57,7 +57,14 @@ Added end-to-end:
 - **Net-worth time series**: `POST /api/finance/snapshot` saves a daily snapshot; `GET /api/finance/net-worth-series` lists them.
 - **Investment returns**: `GET /api/finance/investments/xirr` returns per-holding + overall absolute return %.
 
-## Iteration D — 2026-02 (this session)
+## Code Quality (2026-02)
+- Fixed React key-prop warnings: stable keys in Overview alerts, Career salary chart (`key={p.id}`), UniversalInbox expanded items
+- Added `useMemo` in `ResultCard` (UniversalInbox) and extracted `CountBadges` component in Overview with memoized entries
+- Fixed Python test files: `is True`/`is not True` → `== True`/`!= True`
+- Fixed Finance investments table duplicate column key: `_return` instead of second `current_value`
+- False positives documented: `is None` in server.py (correct PEP8), useCallback/useEffect deps for module-level imports
+
+
 - **Part 5 — Plan Upload Auto-Update (Diff/Confirm Modal)**:
   - `/api/inbox/file` gains `dry_run=true` form param: parses document but does NOT create records, returns `{proposed: true, parsed, document_id}`.
   - New `/api/inbox/apply` endpoint: accepts `{parsed, doc_id, member_id, selected_types[]}`, applies only the user-selected record types, writes to `update_log` collection.
