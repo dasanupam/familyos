@@ -95,3 +95,42 @@
 
 /* Selection */
 ::selection { background: #184A31; color: #F2F0E9; }
+
+/* Dark mode */
+.dark {
+  --bg: #0F1A14;
+  --surface: #172112;
+  --primary: #3A8A5C;
+  --primary-hover: #4CA370;
+  --secondary: #C25942;
+  --accent: #D19B4C;
+  --success: #4CA370;
+  --text: #E8E4DB;
+  --text-soft: #8B9E90;
+  --border: #263B2E;
+}
+
+.dark html, .dark body, .dark #root { background: var(--bg); color: var(--text); }
+
+.dark .card-surface {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.dark .label-eyebrow { color: var(--text-soft); }
+
+.dark input, .dark select, .dark textarea {
+  background: #1E2E24 !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.dark ::-webkit-scrollbar-thumb { background: #3a5040; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #4a6050; }
+
+.dark .bg-white { background-color: var(--surface) !important; }
+.dark .bg-\[\#F2F0E9\] { background-color: var(--bg) !important; }
+.dark .bg-\[\#F2F0E9\]\/50 { background-color: rgba(15, 26, 20, 0.5) !important; }
+.dark .border-\[\#E5E2DC\] { border-color: var(--border) !important; }
+.dark .text-\[\#111812\] { color: var(--text) !important; }
+.dark .text-\[\#5E6A62\] { color: var(--text-soft) !important; }

@@ -1,141 +1,142 @@
-<analysis>**original_problem_statement**: 
-The user Anupam Das is building LifeOS, a personal and family life operating system managing data for 5 family members. The overarching goal is to implement 3 major iterations (A, B, C).
-Requirements include:
-1. **Architectural Fixes:** Creating a Service Abstraction layer (, ).
-2. **Access Control (RBAC):** Admin (Anupam) sees all family data and member switcher. Members (e.g., Abhilasha) see only their own data with no switcher.
-3. **New Models & APIs:** Adding Goals, RSU Vest Pipeline, SIP Tracker, Tax, Insurance, Subscriptions, Budget, Appointments, Fitness, Vaccinations, ID Docs, Property, Emergency fund.
-4. **Dashboards:** Rebuilding top-level navigation, per-module overview pages, and a master Overview dashboard with net worth charts and alerts.
-5. **Plan Upload & Auto-Update:** Enhancing the AI parser to detect document targets (Finance, Health, etc.), showing a diff UI to users to confirm changes, and applying updates deduplicated.
-6. **UI Polish & Bugs:** Indian currency formatting, inline edits, missing document linked records, FIRE tracker XIRR calculations.
+<analysis>**original_problem_statement**: The user is building LifeOS, a personal and family life OS. The goal is to execute Iteration D (Post A+B+C Audit), focusing on missing UI elements, extended alerts, UI polish, and application-level encryption. The user explicitly instructed to implement Priorities 1, 2, 3, 4, 5, 6, 7, 8, 10.1, 10.2, 10.4, 11, and 12 in order, but **EXPLICITLY EXCLUDED Priority 9 (Free tier migration to Gemini/G-Drive) and Priority 10.3 (litellm dependency change)**. Key requirements include: Goals domain + urgency, Finance per-tab summaries, Health summary header + vitals split + all lab parameter charts, Household values instead of counts, Plan upload target auto-update, Budget vs Actuals, Travel/Career inline edits, Application-level text field encryption (), and extended household alerts logic.
 
 **User's preferred language**: English
-*(Instruction to next agent: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only. Since it is English, respond in English only).*
+INSTRUCT next agent: You MUST respond in English only.
 
 **what currently exists?** 
-A functional React + FastAPI + MongoDB application. The previous agents successfully completed Iterations A and B. The backend has service abstractions, strict RBAC, and all APIs/Models for the new modules. The frontend has updated dashboards. The agent is currently working on Iteration C (UI polish, bug fixes, and Plan Upload Auto-Update). In the current session, the agent merely explored the codebase to understand the remaining tasks (Travel/Career inline edits, Documents linked records, XIRR, Plan upload) and proposed an execution plan for user approval.
+A functional React + FastAPI + MongoDB app. Iterations A, B, and C are implemented. The backend has just been updated to support Iteration D features (app-level encryption via  is in , extended  is implemented). , , and  are updated. The previous agent was actively reviewing , , and  to gather context for the next feature (Priority 4) and has just triggered the  tool to confirm the upcoming execution plan.
 
-**Last working item**:
-- **Last item agent was working:** Context gathering and formulating an execution plan for the pending tasks (Travel/Career inline edits, Documents linked records, FIRE XIRR calculation, and Part 5 Plan upload logic). The agent submitted the plan via the  tool.
-- **Status:** BLOCKED (Waiting for user response to the  tool)
-- **Agent Testing Done:** N
-- **Which testing method agent to use?** Frontend testing agent / backend testing agent / both (depending on which task is picked next)
-- **User Testing Done:** N
+**Last working item**: 
+    - Last item agent was working: Gathering codebase context (, , ) to prepare the implementation plan for Priority 4 (Health UI updates) and Priority 3 (Finance UI updates). The agent sent the proposed plan via  and is currently waiting for the user's approval.
+    - Status: BLOCKED (Waiting for user response to ask_human)
+    - Agent Testing Done: N
+    - Which testing method agent to use? testing_agent_v3_fork (For frontend flows once UI rewrites are batched)
+    - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-- **Issue 1: Linked records panel missing in Documents page (Part 8)**
-  - **Attempted fixes:** Explored  and  () to understand how  mappings work. No code changed yet.
-  - **Next debug checklist:** Check  and ensure it maps  and  (or  records) to show which records were created from parsed documents. Ensure the backend endpoint correctly aggregates records tied to a document.
-  - **Why fix this issue and what will be achieved with the fix?:** Required per PRD to track AI parser record generation so users can see what records a document generated.
-  - **Status:** NOT STARTED
-  - **Is recurring issue?** N
-  - **Should Test frontend/backend/both after fix?** Frontend
-  - **Blocked on other issue:** User approval of plan.
-  
-- **Issue 2: FIRE tracker XIRR calculation (Part 8)**
-  - **Attempted fixes:** Reviewed  in . No code changed.
-  - **Next debug checklist:** Implement proper XIRR formula (Newton-Raphson on cash flows) instead of absolute return % inside the backend API, and ensure the frontend displays it correctly in the FIRE tracker UI.
-  - **Why fix this issue and what will be achieved with the fix?:** Required per PRD for accurate financial tracking of investments.
-  - **Status:** NOT STARTED
-  - **Is recurring issue?** N
-  - **Should Test frontend/backend/both after fix?** Both
-  - **Blocked on other issue:** User approval of plan.
+**All Pending/In progress Issue list**:  
+  - Issue 1: Complete  implementation (Priority 4) [P0]
+     - Attempted fixes: Read the current  file to understand its structure, but no edits made yet.
+     - Next debug checklist: Modify  update the Labs tab to group and render charts for ALL tests with ≥ 2 data points (with search/filter and flagged toggle), and split the Appointments tab into Upcoming and Past sections.
+     - Why fix this issue and what will be achieved with the fix? Fulfills Priority 4 requirements for a better Health dashboard.
+     - Status: NOT STARTED (Context gathered)
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on other issue: None
 
-**In progress Task List**:
-- **Task 1: Complete UI/UX Polish (Part 7) & Inline Editing**
-  - **Where to resume:** The agent previously worked on inline editing functionality for  and . In this session, the agent mapped out , , and backend . 
-  - **What will be achieved with this?** Consistent UI/UX, formatting (), and seamless editing across modules as defined in the PRD.
-  - **Status:** IN PROGRESS
-  - **Should Test frontend/backend/both after fix?** Frontend
-  - **Blocked on something:** User approval of the plan.
+  - Issue 2: Bugs from previous audit (Priority 8) [P2]
+     - Attempted fixes: None yet.
+     - Next debug checklist: Ensure  is populated accurately. Add subtitle to Active Medications tab in : Derived from prescriptions up to [date].
+     - Why fix this issue and what will be achieved with the fix? Fixes existing UI issues and test documentation.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on other issue: None
+
+**In progress Task List**: 
+  - Task 1: Complete  rewrite
+     - Where to resume: Wait for user approval on , then overwrite .
+     - What will be achieved with this? Health dashboards will display required summary stats and dynamic charts.
+     - Status: NOT STARTED (Planning phase)
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on something: User approval on .
 
 **Upcoming and Future Tasks**
-- **Task 1 (P0): Part 5 — Plan Upload → Auto-update targets.** 
-  - **Details:** Extend  in  to extract structured targets. Create a diff/confirm modal in the React frontend (This document will update X records) with checkboxes for the user to approve changes. Create an  collection. Implement deduplication logic.
-- **Task 2 (P1): Build/Verify Recharts LineChart for Net worth time-series** 
-  - **Details:** Ensure the  net worth line chart properly consumes the  API and displays accurately.
+    - Priority 3 (P1): Finance page per-tab summaries + fixes (Add 3-card summary bar to all Finance tabs, Insurance expiry coloring, Subscriptions monthly total banner, RSU vest timeline).
+    - Priority 7 (P2): Missing Pages (Budget vs Actuals under Finance, Travel/Career inline edit, Documents linked records).
+    - Priority 6 (P3): Plan upload → target auto-update (Update  endpoint, DiffConfirmView in UniversalInbox to show ).
+    - Priorities 10.1, 10.2, 10.4 (P4): Remaining UI polish tasks from Iteration D.
+    - *Note: DO NOT implement Priority 9 (Free tier migration) and Priority 10.3 (litellm dependency change).*
 
 **Completed work in this session**
-- No files were modified in this session. The agent focused on reading source code (, , , , , ) to build context and prompt the user with a step-by-step plan.
-
-- **Recently completed:**
-  - Service abstraction layer  &  (DONE)
-  - Auth token and login redirect bug fixes (DONE)
-  - Strict RBAC implementation frontend/backend (DONE)
-  - DB Seed Data created and  emails utilized (DONE)
-  - Backend APIs & Models for all Part 3 requirements (DONE)
-  - Overview, Finance, Health, Property Dashboard UIs (DONE)
+- Read context for , , and  (DONE)
+- Formulated and submitted task execution plan to user via  (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-- None found during this session.
+- None.
 
 **Known issue recurrence from previous fork**
-- **Issue recurrence in previous fork:** Pydantic email validation failed when seeding users with  domains (e.g., ). 
-- **Recurrence count:** 1
-- **Status:** RESOLVED
-- **Note:** Do NOT use  domains for Pydantic  fields. Stick to .
+  - Issue recurrence in previous fork:  email addresses failed Pydantic validation.
+  - Recurrence count: 1
+  - Status: RESOLVED (Previous agent used ).
 
 **Code Architecture**
-
+/app/
+├── backend/
+│   ├── scripts/
+│   │   └── migrate_encrypt.py (One-time migration script)
+│   ├── services/
+│   │   ├── ai_service.py 
+│   │   ├── storage_service.py 
+│   │   └── crypto_service.py (AES-128 Fernet encryption)
+│   ├── ai_parser.py
+│   ├── auth.py
+│   └── server.py
+├── frontend/
+│   ├── src/
+│   │   ├── App.js
+│   │   ├── components/ 
+│   │   ├── lib/ 
+│   │   └── pages/ (Health.jsx, Finance.jsx, Overview.jsx, FamilyOverview.jsx, Goals.jsx)
+│   └── vercel.json
+├── render.yaml
+└── memory/
+    └── test_credentials.md
 
 **Key Technical Concepts**
-- Frontend: React, Tailwind, Shadcn, Recharts
-- Backend: FastAPI, Motor (MongoDB async driver)
-- Auth: JWT (strictly passing )
-- Architecture: Role-Based Access Control (RBAC). Admin relies on  queries; Member roles are forcefully filtered server-side using .
+- Frontend: React, Tailwind, Shadcn UI, Recharts
+- Backend: FastAPI, Motor (MongoDB)
+- Encryption:  symmetric AES-128 encryption.
 
 **key DB schema**
-- : 
-- : 
-- Multiple collections (, , , , etc.) tied to  and .
+- Goals:  (String),  (String).
+- Encrypted Collections: Text fields (, , , ) are stored encrypted via .
 
 **changes in tech stack**
--  and  are mandatory wrappers. **CRITICAL:** Do NOT call  directly from anywhere except these two files.
+- App-level encryption using python  library (AES-128 Fernet) implemented recently.
 
 **All files of reference**
--  (Reviewed endpoints and patch collections)
--  (Reviewed logic for inline edits)
--  (Reviewed logic for inline edits)
--  (Reviewed linked records mapping)
--  (Reviewed net-worth chart mapping)
--  (Checked priorities)
+-  (Target for Priority 4 rewrite)
+-  (Target for Priority 3 rewrite)
+-  (Frontend routing context)
+-  (Product Requirements reference)
+-  (Main backend file, already updated for Priorities 1,2,5,11,12)
 
 **Areas that need refactoring**
--  is extremely large. While functional, future maintainability might require splitting it into FastAPI routers. (Only refactor if specifically needed for task completion).
+-  is very long but functional. Continue extending it without premature refactoring unless requested.
+-  and  require extensive rewrites to accommodate new dashboard elements.
 
 **key api endpoints**
--  (Dynamically maps frontend patch requests to MongoDB collections)
-- 
-- 
-- 
+-  (Extended rules implemented)
+-  (Fetches distinct lab test names)
 
 **Critical Info for New Agent**
-1. **RBAC Logic:**  in the backend enforces that member role users cannot see others' data, regardless of what  the frontend sends.
-2. **Abstraction strictness:** Never import  outside of  or .
-3. **Login Details:** Look at  for accurate seed emails () and passwords. Admin is Anupam, Member is Abhilasha.
-4. **Current Status:** The agent followed the user's instructions to load context and use  to verify the execution plan. The user has not yet responded to the  prompt. Your first task is to read the user's incoming response to this prompt and proceed executing the confirmed tasks.
+- **USER STRICT INSTRUCTION**: You MUST NOT execute Priority 9 (Free tier migration) and Priority 10.3 (removing litellm). The files  and  must stay strictly as they are.
+- **Encryption**: An  is present in . Data entry endpoints automatically encrypt fields before saving.
+- The  tool was just triggered. You must start your continuation by processing the user's response to the plan.
 
 **documents and test reports created in this job**
-- None created in this session.
+-  (from previous macro-iteration)
 
-**Last 10 User Messages and any pending HUMAN messages**
-1.  - **PENDING** (Agent called  with the plan, waiting for user response)
+**Last 10 User Messages and any pending HUMAN messages** 
+ 1. (User): Proceed with everything EXCEPT Priority 9 and Priority 10.3... Build all other priorities in the order specified. (Completed context)
+ 2. (User): Please use ask_human tool and confirm your plan now. (Completed context)
+ 3. (Assistant): Formulated plan, viewed files, and called . (Completed)
+ 4. *(PENDING HUMAN MESSAGE)*: The system is currently waiting on the user's response to the  call containing the proposed plan.
 
 **Project Health Check:**
-Healthy. No broken dependencies or test failures.
+Healthy. No broken dependencies or test failures. Backend successfully compiles.
 
 **3rd Party Integrations**
--  (AI & Storage) — uses Emergent LLM Key (Abstracted inside  layer).
+-  (AI & Storage) — uses Emergent LLM Key. (MUST NOT BE CHANGED per user instructions).
 
 **Testing status**
-- Testing agent used after significant changes: NO (No changes made in this session)
-- Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: None
-- Known regressions: None
+  - Testing agent used after significant changes: NO (Pending implementation of new UI features first)
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None
+  - Known regressions: None
 
 **Credentials to test flow:**
-Available in .
-Admin:  / 
-Member:  / 
+Available in . (Reviewing and updating this is part of Priority 8).
 
 **What agent forgot to execute**
-- The agent didn't forget anything; they perfectly followed the instruction to analyze the existing code and stop to request confirmation of the plan via .</analysis>
+The agent did not forget anything; it successfully gathered context on  and  and called . The next immediate step is to read the user's response and proceed with the  (Priority 4) rewrite.</analysis>

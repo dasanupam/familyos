@@ -31,64 +31,51 @@ INR, generic enough to accept any report or pdf and route to the right module.
 - Family switcher in header (whole-family / per-member)
 - Outfit + Manrope fonts, organic earthy palette (no purple/violet), grain texture, INR
 
-## Backlog / Not yet built (P1/P2)
-- P1: image OCR for lab/prescription photos (Gemini multimodal fallback or Tesseract)
-- P1: edit existing transactions/investments/labs in-line
-- P1: link documents to specific entries created from them
-- P1: export to CSV
-- P2: extension modules UI (fitness, travel) using GenericEntry collection
-- P2: shared household notifications (e.g. "Priya logged BP 145/95 — outside range")
-- P2: monthly auto-summary email
-- P2: net worth time series + investment XIRR
-- P3: encryption-at-rest for sensitive health data
-- P3: PWA install + push notifications
+## Iteration 2 — 2026-02 (Iteration B)
+- Travel module, Career module, inline edit, CSV export, document→records linking
+- Net worth time series, investment XIRR/CAGR
+- Image OCR via Gemini 2.5 Flash multimodal
+- DiffConfirmView in UniversalInbox (dry_run + /inbox/apply)
 
-## Test credentials
-demo@familyos.app / Demo@2026  (seeded; see /app/memory/test_credentials.md)
+## Iteration C — 2026-02
+- Career inline edit (events, roles, skills)
+- Investment CAGR with purchase_date
+- Finance investments: Return % column
+- Documents linked records verified
 
-## Iteration 2 — 2026-02 (this session)
-Added end-to-end:
-- **Travel module**: trips CRUD, per-trip spend summary, budget progress bars, AI-routed from "Booked Goa trip…" / hotel emails.
-- **Career module**: timeline (promotions/raises/certs/achievements), roles & salary progression chart, skills with 1-5 levels. AI auto-creates promotion events from offer/appointment letter text.
-- **AI parser** now handles a 5-category schema: finance, health, travel, career, generic. PDFs → Claude Sonnet 4.5. Images → **Gemini 2.5 Flash via Emergent Universal Key** (no extra subscription needed).
-- **Inline edit** for transactions, investments, loans, labs, vitals, prescriptions, trips, career-events via a single PATCH `/api/{kind}/{id}` endpoint.
-- **CSV export** for transactions/investments/loans/labs/vitals/prescriptions/trips/career-events/goals via `/api/export/{kind}.csv?auth=…`.
-- **Document → records linking**: every record created from a file upload stores `origin_document_id`. `/api/documents/{id}/records` returns linked rows.
-- **Net-worth time series**: `POST /api/finance/snapshot` saves a daily snapshot; `GET /api/finance/net-worth-series` lists them.
-- **Investment returns**: `GET /api/finance/investments/xirr` returns per-holding + overall absolute return %.
+## Iteration D — 2026-06 (current)
+- **Priority 1 (Goals)**: Goals domain field + urgency indicator (overdue/at-risk)
+- **Priority 2 (Overview/FamilyOverview)**: Extended stat cards, household values
+- **Priority 5 (Household/Alerts)**: Extended alert rules (insurance expiry, vaccine due, etc.)
+- **Priority 11 (Encryption)**: App-level AES-128 Fernet encryption via crypto_service.py for sensitive text fields
+- **Priority 12 (Encrypt Migrations)**: migrate_encrypt.py one-time migration script
+- **Priority 4 (Health UI)**: 4-stat summary header, Vitals per-kind sparklines, Labs ALL charts (≥2pts) + flagged toggle, Appointments Upcoming/Past split, Active Meds subtitle with last prescription date
+- **Priority 3 (Finance UI)**: Per-tab 3-card summary bars (changes per active tab), Insurance expiry ≤30 days → red row highlight, Subscriptions monthly total in summary
+- **Priority 7 (Budget vs Actuals)**: New Finance tab with month picker, grouped bar chart (Budget amber vs Actual green/red), progress bar table per category, full CRUD via /api/finance/budget
+- **Priority 6 (Plan Upload → Goal Target Auto-Update)**: `/inbox/file` dry_run returns `plan_updates` array (existing vs proposed target diff). `DiffConfirmView` shows amber-colored "Goal Target Updates" section with per-item checkboxes. `/inbox/apply` accepts `approved_goal_names` for selective goal target updates
+- **Household Notifications**: `FamilyOverview` (`/household`) has `HouseholdNotifications` section that fetches `/alerts`, filters health alerts, and shows member-named alerts (e.g., "Anupam Das's Cholesterol is 220.0 mg/dL (high)")
+- **Bug fix**: `/api/search` was using wrong MongoDB collection names (`health_labs`, `health_appointments`) — fixed to `lab_results`, `appointments`
+- **Priority 10.1 (Global Search)**: Cmd+K command palette, searches transactions/labs/goals/appointments/investments, backend /api/search endpoint, keyboard navigation
+- **Priority 10.2 (Dark mode)**: Moon/Sun toggle in header, dark CSS variables, localStorage persistence (flos_dark)
+- **Priority 10.4 (Mobile bottom nav)**: Fixed 5-item bottom nav bar on mobile, floating search button
+- **Bug fix**: formatINRCompact added to @/lib/api and re-exported from @/lib/utils (was missing)
 
-## Code Quality (2026-02)
-- Fixed React key-prop warnings: stable keys in Overview alerts, Career salary chart (`key={p.id}`), UniversalInbox expanded items
-- Added `useMemo` in `ResultCard` (UniversalInbox) and extracted `CountBadges` component in Overview with memoized entries
-- Fixed Python test files: `is True`/`is not True` → `== True`/`!= True`
-- Fixed Finance investments table duplicate column key: `_return` instead of second `current_value`
-- False positives documented: `is None` in server.py (correct PEP8), useCallback/useEffect deps for module-level imports
-
-
-- **Part 5 — Plan Upload Auto-Update (Diff/Confirm Modal)**:
-  - `/api/inbox/file` gains `dry_run=true` form param: parses document but does NOT create records, returns `{proposed: true, parsed, document_id}`.
-  - New `/api/inbox/apply` endpoint: accepts `{parsed, doc_id, member_id, selected_types[]}`, applies only the user-selected record types, writes to `update_log` collection.
-  - `UniversalInbox.jsx` rewritten with `DiffConfirmView` component: per-type checkboxes, expand/collapse preview of each record, Apply count button, Skip.
-  - Text inbox unchanged (still auto-saves immediately — appropriate for quick one-liners).
-- **Image OCR for Lab Photos (Gemini Vision)**:
-  - Already wired via `parse_image_file()` → Gemini 2.5 Flash multimodal. Now enhanced with lab-specific prompting (extract every parameter, unit, reference range).
-  - Accepted file types extended to include `.heic` / `.heif` (iPhone photos).
-  - "Vision AI" badge shown in diff confirm modal and result card when processed via Gemini.
+## Key DB Schema
+- Goals: `domain` (String), `urgency` computed from target_date
+- Budgets: `month` (YYYY-MM), `category`, `budgeted_amount`, `actual_amount` (computed)
+- Encrypted Collections: merchant, name, test, doctor fields via AES-128 Fernet
 
 ## Backlog (remaining open items)
-- Auto-snapshot net-worth on a schedule (cron / background task)
+- Auto-snapshot net-worth on schedule (cron/background)
 - Weekly digest email (Resend integration)
 - PWA install + push notifications
 - Shared household notifications ("Amal's HbA1c is above 6.5%")
-- True per-lot XIRR (currently CAGR approximation when purchase_date set)
+- True per-lot XIRR (currently CAGR approximation)
+- P2: image OCR improvements
+- P3: Priority 9 (Free tier migration) — EXPLICITLY EXCLUDED by user
+- P3: Priority 10.3 (litellm dependency change) — EXPLICITLY EXCLUDED by user
 
-
-## Iteration C — 2026-02 (this session)
-- **Career inline edit**: Edit buttons (pencil) on timeline events, role cards, and skills. PATCH via `/api/career-events`, `/api/career-roles`, `/api/career-skills`.
-- **PATCH_COLLECTIONS**: Added `career-roles` and `career-skills` to backend generic PATCH handler.
-- **CSV_KINDS**: Added `career_roles` and `career_skills` to backend export.
-- **Investment CAGR**: Added `purchase_date` field to `InvestmentIn` model. `/finance/investments/xirr` now returns `cagr` (annualized) when `purchase_date` is set.
-- **Finance investments table**: Added "Return %" computed column (green/red based on gain/loss).
-- **Finance investments form**: Added `purchase_date` date picker field.
-- **Documents linked records**: Already implemented via `LinkedRecords` component — verified working.
-- **Net worth time-series chart**: Already wired in Overview.jsx — auto-snapshots on each load, Recharts LineChart renders when >= 2 snapshots exist.
+## Test credentials
+See /app/memory/test_credentials.md
+- Admin: anupam@familyos.app / Test@1234
+- Demo: demo@familyos.app / Demo@2026

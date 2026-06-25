@@ -17,13 +17,15 @@ import io
 import time
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+TEST_ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "anupam@familyos.app")
+TEST_ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Test@1234")
 
 
 @pytest.fixture(scope="module")
 def auth_token():
     resp = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "anupam@familyos.app",
-        "password": "Test@1234"
+        "email": TEST_ADMIN_EMAIL,
+        "password": TEST_ADMIN_PASSWORD,
     })
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     data = resp.json()
@@ -126,7 +128,7 @@ class TestInboxFileDryRun:
         resp = requests.post(f"{BASE_URL}/api/inbox/file", files=files, data=data, headers=headers)
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         result = resp.json()
-        assert result.get("proposed") == True, f"Expected proposed=True, got: {result}"
+        assert result.get("proposed") is True, f"Expected proposed=True, got: {result}"
 
     def test_dry_run_returns_document_id(self, headers):
         """dry_run=true should store document and return document_id"""
@@ -158,7 +160,7 @@ class TestInboxFileDryRun:
         resp = requests.post(f"{BASE_URL}/api/inbox/file", files=files, data=data, headers=headers)
         assert resp.status_code == 200
         result = resp.json()
-        assert result.get("proposed") == True
+        assert result.get("proposed") is True
 
         # Wait a moment for any async operations
         time.sleep(1)
@@ -216,7 +218,7 @@ class TestInboxFileNoDryRun:
         result = resp.json()
         # Should have counts key, NOT proposed
         assert "counts" in result or "document_id" in result, f"Expected counts in response: {result}"
-        assert result.get("proposed") != True, "Should NOT return proposed=True without dry_run"
+        assert result.get("proposed") is not True, "Should NOT return proposed=True without dry_run"
 
     def test_no_dry_run_returns_document_id(self, headers):
         """Without dry_run, file upload should still return document_id"""
