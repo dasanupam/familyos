@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useNavigate, Link } from "react-router-dom";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
   const { register } = useAuth();
   const nav = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
@@ -62,16 +63,25 @@ export default function Register() {
           </div>
           <div>
             <label className="label-eyebrow block mb-2">Password</label>
-            <input
-              data-testid="register-password-input"
-              type="password"
-              required
-              minLength={6}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="w-full border border-[#E5E2DC] bg-white px-4 py-3 rounded-xl focus:outline-none focus:border-[#184A31]"
-              placeholder="at least 6 characters"
-            />
+            <div className="relative">
+              <input
+                data-testid="register-password-input"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={6}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full border border-[#E5E2DC] bg-white px-4 py-3 pr-12 rounded-xl focus:outline-none focus:border-[#184A31]"
+                placeholder="at least 6 characters"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5E6A62] hover:text-[#184A31]"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <button
             data-testid="register-submit-button"
