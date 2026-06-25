@@ -24,6 +24,7 @@ load_dotenv(ROOT_DIR / ".env")
 from auth import hash_password, verify_password, create_token, decode_token
 from storage import init_storage, guess_mime
 from services.storage_service import upload_file, get_file_content
+from services.crypto_service import encrypt_doc, decrypt_doc, decrypt_list, encrypt, decrypt
 from ai_parser import parse_universal, parse_image_file
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -132,6 +133,8 @@ class VitalIn(BaseModel):
     kind: str
     value: str
     unit: Optional[str] = None
+    systolic: Optional[float] = None
+    diastolic: Optional[float] = None
 
 
 class PrescriptionIn(BaseModel):
@@ -721,15 +724,16 @@ async def _finance_summary_q(q: dict) -> dict:
 
 @api.get("/finance/transactions")
 async def list_transactions(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.transactions.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+    docs = await db.transactions.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+    return decrypt_list("transactions", docs)
 
 
 @api.post("/finance/transactions")
 async def create_transaction(body: TransactionIn, current_user: dict = Depends(get_current_user)):
     doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
-    await db.transactions.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    store_doc = encrypt_doc("transactions", doc)
+    await db.transactions.insert_one(store_doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 
 @api.delete("/finance/transactions/{tx_id}")
@@ -740,15 +744,16 @@ async def delete_transaction(tx_id: str, current_user: dict = Depends(get_curren
 
 @api.get("/finance/investments")
 async def list_investments(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.investments.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(500)
+    docs = await db.investments.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(500)
+    return decrypt_list("investments", docs)
 
 
 @api.post("/finance/investments")
 async def create_investment(body: InvestmentIn, current_user: dict = Depends(get_current_user)):
     doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
-    await db.investments.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    store_doc = encrypt_doc("investments", doc)
+    await db.investments.insert_one(store_doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 
 @api.delete("/finance/investments/{inv_id}")
@@ -797,8 +802,11 @@ async def monthly_trend(member_id: Optional[str] = None, current_user: dict = De
 
 # ── Goals ──────────────────────────────────────────────────────────────────────
 @api.get("/goals")
-async def list_goals(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.goals.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+async def list_goals(member_id: Optional[str] = None, domain: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    q = resolve_member_filter(current_user, member_id)
+    if domain:
+        q["domain"] = domain
+    return await db.goals.find(q, {"_id": 0}).to_list(200)
 
 
 @api.post("/goals")
@@ -860,15 +868,16 @@ async def upsert_fire(body: FireConfigIn, current_user: dict = Depends(get_curre
 # ── Health ─────────────────────────────────────────────────────────────────────
 @api.get("/health/prescriptions")
 async def list_prescriptions(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.prescriptions.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+    docs = await db.prescriptions.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(500)
+    return decrypt_list("prescriptions", docs)
 
 
 @api.post("/health/prescriptions")
 async def create_prescription(body: PrescriptionIn, current_user: dict = Depends(get_current_user)):
     doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
-    await db.prescriptions.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
+    store_doc = encrypt_doc("prescriptions", doc)
+    await db.prescriptions.insert_one(store_doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
 
 
 @api.delete("/health/prescriptions/{pid}")
@@ -1455,17 +1464,21 @@ class AppointmentIn(BaseModel):
 
 @api.get("/health/appointments")
 async def list_appointments(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.appointments.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("appointment_date", -1).to_list(500)
+    docs = await db.appointments.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("appointment_date", 1).to_list(500)
+    return decrypt_list("appointments", docs)
 
 @api.post("/health/appointments")
 async def create_appointment(body: AppointmentIn, current_user: dict = Depends(get_current_user)):
-    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
-    await db.appointments.insert_one(d); d.pop("_id", None); return d
+    doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    store_doc = encrypt_doc("appointments", doc)
+    await db.appointments.insert_one(store_doc); return {k: v for k, v in doc.items() if k != "_id"}
 
 @api.put("/health/appointments/{aid}")
 async def update_appointment(aid: str, body: AppointmentIn, current_user: dict = Depends(get_current_user)):
-    await db.appointments.update_one({"id": aid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
-    return await db.appointments.find_one({"id": aid}, {"_id": 0})
+    store = encrypt_doc("appointments", body.model_dump())
+    await db.appointments.update_one({"id": aid, "user_id": get_family_user_id(current_user)}, {"$set": store})
+    doc = await db.appointments.find_one({"id": aid}, {"_id": 0})
+    return decrypt_doc("appointments", doc) if doc else {}
 
 @api.delete("/health/appointments/{aid}")
 async def delete_appointment(aid: str, current_user: dict = Depends(get_current_user)):
@@ -1532,17 +1545,21 @@ class IdentityDocIn(BaseModel):
 
 @api.get("/identity")
 async def list_identity(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    return await db.identity_documents.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+    docs = await db.identity_documents.find(resolve_member_filter(current_user, member_id), {"_id": 0}).to_list(200)
+    return decrypt_list("identity_documents", docs)
 
 @api.post("/identity")
 async def create_identity(body: IdentityDocIn, current_user: dict = Depends(get_current_user)):
-    d = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
-    await db.identity_documents.insert_one(d); d.pop("_id", None); return d
+    doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(), "created_at": now_iso()}
+    store = encrypt_doc("identity_documents", doc)
+    await db.identity_documents.insert_one(store); return {k: v for k, v in doc.items() if k != "_id"}
 
 @api.put("/identity/{did}")
 async def update_identity(did: str, body: IdentityDocIn, current_user: dict = Depends(get_current_user)):
-    await db.identity_documents.update_one({"id": did, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
-    return await db.identity_documents.find_one({"id": did}, {"_id": 0})
+    store = encrypt_doc("identity_documents", body.model_dump())
+    await db.identity_documents.update_one({"id": did, "user_id": get_family_user_id(current_user)}, {"$set": store})
+    doc = await db.identity_documents.find_one({"id": did}, {"_id": 0})
+    return decrypt_doc("identity_documents", doc) if doc else {}
 
 @api.delete("/identity/{did}")
 async def delete_identity(did: str, current_user: dict = Depends(get_current_user)):
@@ -1619,49 +1636,212 @@ async def delete_emergency_fund(eid: str, current_user: dict = Depends(get_curre
     await db.emergency_fund.delete_one({"id": eid, "user_id": get_family_user_id(current_user)}); return {"ok": True}
 
 
+# ── Labs Parameters ───────────────────────────────────────────────────────────
+@api.get("/health/labs/parameters")
+async def labs_parameters(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Return distinct lab test parameters with latest value, unit, reference range, and flagged status."""
+    labs = await db.lab_results.find(resolve_member_filter(current_user, member_id), {"_id": 0}).sort("date", -1).to_list(5000)
+    by_test: dict = {}
+    for lab in labs:
+        test = (lab.get("test") or "").strip()
+        if test:
+            by_test.setdefault(test, []).append(lab)
+    result = []
+    for test, entries in sorted(by_test.items()):
+        entries.sort(key=lambda x: x.get("date", ""), reverse=True)
+        latest = entries[0]
+        flagged = False
+        ref_range = latest.get("reference_range") or ""
+        try:
+            val = float(str(latest.get("value", "")).replace(",", ""))
+            for sep in ("–", "-"):
+                if sep in ref_range:
+                    parts = ref_range.split(sep)
+                    lo, hi = float(parts[0].strip()), float(parts[1].strip())
+                    flagged = val < lo or val > hi
+                    break
+        except Exception:
+            pass
+        result.append({"test": test, "latest_value": latest.get("value"), "unit": latest.get("unit"),
+                        "reference_range": ref_range, "latest_date": latest.get("date"),
+                        "data_points": len(entries), "flagged": flagged, "member_id": latest.get("member_id")})
+    return result
+
+
 # ── Alerts ────────────────────────────────────────────────────────────────────
 @api.get("/alerts")
 async def get_alerts(current_user: dict = Depends(get_current_user)):
     from datetime import timedelta
     fuid = get_family_user_id(current_user)
     today_d = date.today()
-    alerts = []
+    today_iso = today_d.isoformat()
+    is_admin = current_user.get("role") == "admin"
+    alerts: list = []
 
-    # Insurance expiring in 60 days
-    cutoff_60 = (today_d + timedelta(days=60)).isoformat()
-    ins = await db.insurance_policies.find({"user_id": fuid, "policy_end": {"$lte": cutoff_60, "$gte": today_d.isoformat()}}, {"_id": 0}).to_list(100)
-    for i in ins:
-        alerts.append({"type": "insurance_expiry", "severity": "warning",
-                        "title": f"Insurance expiring: {i['insurer']} {i['policy_type']}",
-                        "date": i["policy_end"], "id": i["id"]})
+    members_list = await db.members.find({"user_id": fuid}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
+    member_map = {m["id"]: m["name"] for m in members_list}
+    check_mids = [m["id"] for m in members_list] if is_admin else ([current_user.get("linked_member_id")] if current_user.get("linked_member_id") else [])
 
-    # Identity docs expiring in 90 days
-    cutoff_90 = (today_d + timedelta(days=90)).isoformat()
-    alert_types = ("passport", "visa", "driving_license")
-    ids = await db.identity_documents.find({"user_id": fuid, "doc_type": {"$in": alert_types},
-                                             "expiry_date": {"$lte": cutoff_90, "$gte": today_d.isoformat()}}, {"_id": 0}).to_list(100)
-    for i in ids:
-        alerts.append({"type": "doc_expiry", "severity": "error" if i["expiry_date"] <= (today_d + timedelta(days=30)).isoformat() else "warning",
-                        "title": f"{i['doc_type'].replace('_',' ').title()} expiring: {i.get('doc_number','')}",
-                        "date": i["expiry_date"], "id": i["id"]})
+    LAB_THRESHOLDS = [
+        ("hba1c",                (">", 6.5,       "above normal")),
+        ("vitamin d",            ("<", 20,         "deficient")),
+        ("cholesterol",          (">", 200,        "high")),
+        ("creatinine",           (">", 1.2,        "high")),
+        ("fasting blood sugar",  (">", 100,        "high")),
+        ("fbs",                  (">", 100,        "high")),
+        ("tsh",                  ("range", (0.4, 4.5), "abnormal")),
+    ]
 
-    # Upcoming appointments (next 7 days)
-    cutoff_7 = (today_d + timedelta(days=7)).isoformat()
-    appts = await db.appointments.find({"user_id": fuid, "appointment_date": {"$gte": today_d.isoformat(), "$lte": cutoff_7}}, {"_id": 0}).to_list(20)
-    for a in appts:
-        alerts.append({"type": "appointment", "severity": "info",
-                        "title": f"Appointment: {a['doctor_name']} ({a.get('speciality','')})",
-                        "date": a["appointment_date"], "id": a["id"]})
+    # ── Health alerts per member ──
+    for mid in check_mids:
+        mname = member_map.get(mid, "Family member")
 
-    # Vaccination due in 30 days
-    cutoff_30 = (today_d + timedelta(days=30)).isoformat()
-    vacs = await db.vaccinations.find({"user_id": fuid, "next_due_date": {"$gte": today_d.isoformat(), "$lte": cutoff_30}}, {"_id": 0}).to_list(20)
-    for v in vacs:
-        alerts.append({"type": "vaccination_due", "severity": "info",
-                        "title": f"Vaccination due: {v['vaccine_name']}",
-                        "date": v["next_due_date"], "id": v["id"]})
+        # Lab results out of range
+        labs = await db.lab_results.find({"user_id": fuid, "member_id": mid}, {"_id": 0}).sort("date", -1).to_list(1000)
+        seen: dict = {}
+        for lab in labs:
+            t = (lab.get("test") or "").strip()
+            if t and t not in seen:
+                seen[t] = lab
+        for test, lab in seen.items():
+            try:
+                val = float(str(lab.get("value", "")).replace(",", ""))
+            except Exception:
+                continue
+            ref_range = lab.get("reference_range") or ""
+            flagged = False; flag_label = ""
+            for sep in ("–", "-"):
+                if sep in ref_range:
+                    try:
+                        lo, hi = (float(x.strip()) for x in ref_range.split(sep, 1))
+                        if val < lo: flagged = True; flag_label = "below normal"
+                        elif val > hi: flagged = True; flag_label = "above normal"
+                    except Exception:
+                        pass
+                    break
+            if not flagged:
+                tl = test.lower()
+                for key, (op, thr, label) in LAB_THRESHOLDS:
+                    if key in tl:
+                        if op == ">" and val > thr: flagged = True; flag_label = label
+                        elif op == "<" and val < thr: flagged = True; flag_label = label
+                        elif op == "range" and (val < thr[0] or val > thr[1]): flagged = True; flag_label = label
+                        break
+            if flagged:
+                alerts.append({"type": "lab_out_of_range", "category": "health", "link": "/health",
+                    "severity": "error", "date": lab.get("date", today_iso),
+                    "title": f"{mname}'s {test} is {val} {lab.get('unit','') or ''} ({flag_label})",
+                    "member_name": mname, "member_id": mid})
 
-    alerts.sort(key=lambda x: x["date"])
+        # BP from vitals
+        bp_v = await db.vitals.find({"user_id": fuid, "member_id": mid, "kind": "bp"}, {"_id": 0}).sort("date", -1).limit(1).to_list(1)
+        for v in bp_v:
+            val_str = str(v.get("value", ""))
+            try:
+                sys_v, dia_v = (float(x) for x in val_str.split("/"))
+                if sys_v > 140 or dia_v > 90:
+                    alerts.append({"type": "bp_high", "category": "health", "link": "/health",
+                        "severity": "error" if sys_v > 160 else "warning", "date": v.get("date", today_iso),
+                        "title": f"{mname}'s BP is {val_str} mmHg (high)", "member_name": mname, "member_id": mid})
+            except Exception:
+                pass
+
+        # Appointments within 7 days
+        c7 = (today_d + timedelta(days=7)).isoformat()
+        appts_raw = await db.appointments.find({"user_id": fuid, "member_id": mid,
+            "appointment_date": {"$gte": today_iso, "$lte": c7}}, {"_id": 0}).to_list(10)
+        for a in decrypt_list("appointments", appts_raw):
+            days_away = (date.fromisoformat(a["appointment_date"]) - today_d).days
+            alerts.append({"type": "appointment", "category": "health", "link": "/health",
+                "severity": "warning", "date": a["appointment_date"],
+                "title": f"{mname} has an appointment with {a.get('doctor_name') or 'doctor'} in {days_away} day{'s' if days_away != 1 else ''}",
+                "member_name": mname, "member_id": mid})
+
+        # Vaccinations due
+        c30 = (today_d + timedelta(days=30)).isoformat()
+        for v in await db.vaccinations.find({"user_id": fuid, "member_id": mid, "next_due_date": {"$gte": today_iso, "$lte": c30}}, {"_id": 0}).to_list(10):
+            alerts.append({"type": "vaccination_due", "category": "health", "link": "/health",
+                "severity": "info", "date": v["next_due_date"],
+                "title": f"{mname}'s {v.get('vaccine_name','')} vaccination is due",
+                "member_name": mname, "member_id": mid})
+
+        # SIP paused
+        for s in await db.sip_entries.find({"user_id": fuid, "member_id": mid, "status": "paused"}, {"_id": 0}).to_list(20):
+            alerts.append({"type": "sip_paused", "category": "finance", "link": "/finance",
+                "severity": "warning", "date": today_iso,
+                "title": f"{mname}'s {s.get('fund_name','')} SIP is paused",
+                "member_name": mname, "member_id": mid})
+
+        # RSU vesting soon (30 days)
+        c30 = (today_d + timedelta(days=30)).isoformat()
+        for r in await db.rsu_grants.find({"user_id": fuid, "member_id": mid}, {"_id": 0}).to_list(50):
+            for ms in r.get("vest_schedule", []):
+                vd = ms.get("date", "")
+                if today_iso <= vd <= c30:
+                    alerts.append({"type": "rsu_vesting", "category": "finance", "link": "/finance",
+                        "severity": "info", "date": vd,
+                        "title": f"{ms.get('units',0)} {r.get('company','')} RSU units vest on {vd} ({mname})",
+                        "member_name": mname, "member_id": mid})
+
+        # Goal off-track / overdue
+        for g in await db.goals.find({"user_id": fuid, "member_id": mid, "target_date": {"$ne": None}}, {"_id": 0}).to_list(50):
+            if not g.get("target_date"): continue
+            try:
+                td_d = date.fromisoformat(g["target_date"])
+                ta = g.get("target_amount") or 1
+                ca = g.get("current_amount") or 0
+                actual_pct = ca / ta * 100
+                if td_d < today_d and actual_pct < 100:
+                    alerts.append({"type": "goal_overdue", "category": "finance", "link": "/goals",
+                        "severity": "error", "date": g["target_date"],
+                        "title": f"Goal overdue: '{g['name']}' is {round(100-actual_pct)}% behind ({mname})",
+                        "member_name": mname, "member_id": mid})
+                elif td_d >= today_d:
+                    start_d = date.fromisoformat((g.get("created_at") or today_iso)[:10])
+                    total_days = max(1, (td_d - start_d).days)
+                    expected_pct = min(100, (today_d - start_d).days / total_days * 100)
+                    if expected_pct - actual_pct > 20:
+                        alerts.append({"type": "goal_off_track", "category": "finance", "link": "/goals",
+                            "severity": "warning", "date": g["target_date"],
+                            "title": f"Goal off-track: '{g['name']}' is {round(expected_pct - actual_pct)}% behind schedule ({mname})",
+                            "member_name": mname, "member_id": mid})
+            except Exception:
+                pass
+
+    # ── Finance alerts (family-wide) ──
+    c7 = (today_d + timedelta(days=7)).isoformat()
+    for s in await db.subscriptions.find({"user_id": fuid, "next_billing_date": {"$gte": today_iso, "$lte": c7}, "status": "active"}, {"_id": 0}).to_list(50):
+        da = (date.fromisoformat(s["next_billing_date"]) - today_d).days
+        mid = s.get("member_id", ""); mname = member_map.get(mid, "")
+        prefix = f"{mname}'s " if mname else ""
+        alerts.append({"type": "subscription_renewal", "category": "finance", "link": "/finance",
+            "severity": "info", "date": s["next_billing_date"],
+            "title": f"{prefix}{s.get('name','')} ₹{s.get('amount',0):,.0f} renews in {da} day{'s' if da != 1 else ''}",
+            "member_name": mname, "member_id": mid})
+
+    c60 = (today_d + timedelta(days=60)).isoformat()
+    for i in await db.insurance_policies.find({"user_id": fuid, "policy_end": {"$gte": today_iso, "$lte": c60}}, {"_id": 0}).to_list(50):
+        dl = (date.fromisoformat(i["policy_end"]) - today_d).days
+        mid = i.get("member_id", ""); mname = member_map.get(mid, "")
+        prefix = f"{mname}'s " if mname else ""
+        alerts.append({"type": "insurance_expiry", "category": "finance", "link": "/finance",
+            "severity": "error" if dl < 15 else "warning", "date": i["policy_end"],
+            "title": f"{prefix}{i.get('insurer','')} {i.get('policy_type','')} policy expires in {dl} days",
+            "member_name": mname, "member_id": mid})
+
+    c90 = (today_d + timedelta(days=90)).isoformat()
+    id_docs_raw = await db.identity_documents.find({"user_id": fuid, "expiry_date": {"$gte": today_iso, "$lte": c90}}, {"_id": 0}).to_list(50)
+    for d_doc in decrypt_list("identity_documents", id_docs_raw):
+        dl = (date.fromisoformat(d_doc["expiry_date"]) - today_d).days
+        mid = d_doc.get("member_id", ""); mname = member_map.get(mid, "")
+        prefix = f"{mname}'s " if mname else ""
+        doc_type = d_doc.get('doc_type', '').replace('_', ' ').title()
+        alerts.append({"type": "doc_expiry", "category": "finance", "link": "/health",
+            "severity": "error" if dl < 30 else "warning", "date": d_doc["expiry_date"],
+            "title": f"{prefix}{doc_type} expires in {dl} days",
+            "member_name": mname, "member_id": mid})
+
+    alerts.sort(key=lambda x: ({"error": 0, "warning": 1, "info": 2}.get(x.get("severity"), 3), x.get("date", "")))
     return alerts
 
 

@@ -1,165 +1,182 @@
-import { useEffect, useState, useCallback } from "react";
-import { api, formatINR, formatINRFull } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Plus, Trash2, Target, Sparkles, Edit3 } from "lucide-react";
-import { Modal, Field, SelectMember } from "@/pages/Finance";
+import { formatINRFull } from "@/lib/utils";
 import { toast } from "sonner";
+import { Target, Trash2, Edit3, Plus } from "lucide-react";
+import Modal from "@/components/Modal";
+import Field from "@/components/Field";
+import ExportCsvButton from "@/components/ExportCsvButton";
+
+const DOMAINS = ["personal", "finance", "health", "career", "travel"];
+const DOMAIN_COLORS = {
+  finance: "bg-[#184A31]/10 text-[#184A31] border-[#184A31]/20",
+  health:  "bg-red-50 text-red-700 border-red-200",
+  career:  "bg-blue-50 text-blue-700 border-blue-200",
+  travel:  "bg-purple-50 text-purple-700 border-purple-200",
+  personal:"bg-[#F2F0E9] text-[#5E6A62] border-[#E5E2DC]",
+};
+
+function urgencyInfo(target_date) {
+  if (!target_date) return null;
+  const today = new Date();
+  const due = new Date(target_date);
+  const daysLeft = Math.ceil((due - today) / 86400000);
+  if (daysLeft < 0) return { label: "Overdue", border: "border-[#C25942]", badge: "bg-[#C25942] text-white", days: daysLeft };
+  if (daysLeft <= 30) return { label: "Due soon", border: "border-[#C25942]", badge: "bg-[#C25942]/10 text-[#C25942]", days: daysLeft };
+  if (daysLeft <= 90) return { label: "Coming up", border: "border-amber-400", badge: "bg-amber-50 text-amber-700", days: daysLeft };
+  return null;
+}
 
 export default function Goals() {
-  const { members } = useAuth();
+  const { activeMember, members } = useAuth();
   const [goals, setGoals] = useState([]);
-  const [fire, setFire] = useState(null);
+  const [domainFilter, setDomainFilter] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
-  const [showFire, setShowFire] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({});
-  const [fireForm, setFireForm] = useState({});
+
+  const memberParam = activeMember === "family" ? "" : `?member_id=${activeMember}`;
+  const defaultMemberId = activeMember === "family" ? members[0]?.id : activeMember;
 
   const refresh = useCallback(async () => {
-    const [a, b] = await Promise.all([api.get("/goals"), api.get("/fire")]);
-    setGoals(a.data);
-    setFire(b.data);
-    if (b.data) setFireForm(b.data);
-  }, []);
+    const q = domainFilter === "all" ? memberParam : `${memberParam}${memberParam ? "&" : "?"}domain=${domainFilter}`;
+    const { data } = await api.get(`/goals${q}`);
+    setGoals(data);
+  }, [memberParam, domainFilter]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const submitGoal = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     try {
-      const body = {
-        ...form, target_amount: Number(form.target_amount),
-        current_amount: Number(form.current_amount || 0),
-        category: form.category || "general",
-      };
-      if (editing) {
-        await api.patch(`/goals/${editing}`, body);
+      const body = { ...form, member_id: form.member_id || defaultMemberId, domain: form.domain || "personal" };
+      if (editingId) {
+        await api.patch(`/goals/${editingId}`, body);
+        toast.success("Goal updated");
       } else {
-        await api.post("/goals", body);
+        await api.post("/goals", { ...body, target_amount: Number(body.target_amount || 0), current_amount: Number(body.current_amount || 0) });
+        toast.success("Goal added");
       }
-      setShowAdd(false); setEditing(null); setForm({});
-      refresh(); toast.success("Saved");
+      setShowAdd(false); setForm({}); setEditingId(null);
+      refresh();
     } catch { toast.error("Save failed"); }
   };
 
-  const submitFire = async (e) => {
-    e.preventDefault();
-    try {
-      await api.post("/fire", {
-        target_corpus: Number(fireForm.target_corpus),
-        monthly_savings: Number(fireForm.monthly_savings),
-        expected_return_pct: Number(fireForm.expected_return_pct || 11),
-        current_corpus: Number(fireForm.current_corpus || 0),
-      });
-      setShowFire(false);
-      refresh(); toast.success("FIRE plan updated");
-    } catch { toast.error("Update failed"); }
+  const remove = async (id) => {
+    await api.delete(`/goals/${id}`);
+    refresh();
   };
 
-  const remove = async (id) => { await api.delete(`/goals/${id}`); refresh(); };
+  const startEdit = (g) => { setEditingId(g.id); setForm(g); setShowAdd(true); };
+  const closeModal = () => { setShowAdd(false); setForm({}); setEditingId(null); };
+
+  const memberName = (id) => members.find(m => m.id === id)?.name || "—";
 
   return (
-    <div className="space-y-6" data-testid="goals-page">
-      <div>
-        <div className="label-eyebrow">Goals & FIRE</div>
-        <h1 className="font-display text-3xl sm:text-4xl font-medium mt-1">Where you're heading</h1>
-      </div>
-
-      <div className="card-surface p-6" data-testid="fire-plan-card">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="label-eyebrow flex items-center gap-1.5"><Sparkles className="h-3 w-3" /> FIRE — Financial Independence Retire Early</div>
-            <h2 className="font-display text-2xl mt-1">{fire ? `${fire.progress_pct}% there` : "Not configured"}</h2>
-            {fire && (
-              <div className="mt-2 text-sm text-[#5E6A62]">
-                {fire.years_to_fire} years to <span className="font-mono text-[#111812]">{formatINRFull(fire.target_corpus)}</span> at <span className="font-mono text-[#111812]">{formatINR(fire.monthly_savings)}/mo</span>
-                {fire.target_date && <span className="ml-2 text-[#367A50]">· Target: {fire.target_date}</span>}
-              </div>
-            )}
-          </div>
-          <button onClick={() => setShowFire(true)} data-testid="configure-fire-button" className="bg-[#184A31] text-white text-sm font-medium px-4 py-2 rounded-full flex items-center gap-1.5">
-            <Edit3 className="h-3.5 w-3.5" /> Configure
+    <div className="space-y-6 pb-8" data-testid="goals-page">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="label-eyebrow">Goals</div>
+          <div className="font-display text-4xl mt-1">Goals & Milestones</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <ExportCsvButton kind="goals" label="Export" />
+          <button onClick={() => { setShowAdd(true); setForm({}); setEditingId(null); }}
+            className="flex items-center gap-2 bg-[#184A31] text-white px-4 py-2.5 rounded-full text-sm font-medium"
+            data-testid="add-goal-button">
+            <Plus className="h-4 w-4" /> Add goal
           </button>
         </div>
-        {fire && (
-          <div className="mt-5">
-            <div className="h-3 bg-[#F2F0E9] rounded-full">
-              <div className="h-full bg-gradient-to-r from-[#184A31] to-[#367A50] rounded-full transition-all" style={{ width: `${Math.min(100, fire.progress_pct)}%` }} />
-            </div>
-            <div className="flex justify-between text-xs text-[#5E6A62] mt-2 font-mono">
-              <span>{formatINRFull(fire.current_corpus || 0)} now</span>
-              <span>{formatINRFull(fire.target_corpus)} target</span>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-xl">Specific goals</h3>
-        <button onClick={() => { setShowAdd(true); setEditing(null); setForm({}); }} data-testid="add-goal-button"
-          className="bg-[#D19B4C] hover:bg-[#c18e3f] text-[#111812] text-sm font-medium px-4 py-2 rounded-full flex items-center gap-1.5">
-          <Plus className="h-4 w-4" /> New goal
-        </button>
+      {/* ── Domain filter tabs ── */}
+      <div className="flex flex-wrap gap-2">
+        {["all", ...DOMAINS].map(d => (
+          <button key={d} onClick={() => setDomainFilter(d)}
+            className={`text-xs px-3.5 py-1.5 rounded-full border capitalize transition ${
+              domainFilter === d
+                ? "bg-[#184A31] text-white border-[#184A31]"
+                : "bg-white border-[#E5E2DC] text-[#5E6A62] hover:border-[#184A31] hover:text-[#184A31]"
+            }`}
+            data-testid={`domain-filter-${d}`}>
+            {d === "all" ? "All" : d}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {goals.length === 0 && (
-          <div className="card-surface p-6 text-sm text-[#5E6A62] col-span-full">
-            No goals yet. Start with classics like "Car ₹8L", "Home down-payment ₹25L", or "Brother's care fund".
-          </div>
-        )}
-        {goals.map((g) => {
-          const pct = g.target_amount > 0 ? Math.min(100, (g.current_amount / g.target_amount) * 100) : 0;
-          return (
-            <div key={g.id} className="card-surface p-5 hover:-translate-y-0.5 transition" data-testid="goal-card">
-              <div className="flex items-start justify-between gap-2">
+      {/* ── Goal cards ── */}
+      {goals.length === 0 ? (
+        <div className="card-surface py-16 flex flex-col items-center text-[#5E6A62]">
+          <Target className="h-8 w-8 mb-3 opacity-40" />
+          <p className="text-sm">No goals yet. Add one to get started.</p>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {goals.map(g => {
+            const pct = g.target_amount > 0 ? Math.min(100, Math.round(g.current_amount / g.target_amount * 100)) : 0;
+            const domain = (g.domain || "personal").toLowerCase();
+            const urg = urgencyInfo(g.target_date);
+            return (
+              <div key={g.id} className={`card-surface p-5 space-y-3 border-l-2 ${urg?.border || "border-transparent"}`} data-testid="goal-card">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${DOMAIN_COLORS[domain] || DOMAIN_COLORS.personal}`}>{domain}</span>
+                      {urg && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${urg.badge}`}>{urg.label}</span>}
+                    </div>
+                    <div className="font-display text-base font-semibold">{g.name}</div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => startEdit(g)} className="text-[#5E6A62]/50 hover:text-[#5E6A62] p-1" data-testid="goal-edit-btn">
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => remove(g.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
                 <div>
-                  <div className="label-eyebrow">{g.category}</div>
-                  <div className="font-display text-xl mt-1">{g.name}</div>
-                  {g.target_date && <div className="text-xs text-[#5E6A62] mt-1">By {g.target_date}</div>}
+                  <div className="flex justify-between text-xs text-[#5E6A62] mb-1">
+                    <span>{formatINRFull(g.current_amount)}</span>
+                    <span className="font-medium">{pct}%</span>
+                    <span>{formatINRFull(g.target_amount)}</span>
+                  </div>
+                  <div className="h-2 bg-[#E5E2DC] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-[#367A50]" : "bg-[#184A31]"}`} style={{ width: `${pct}%` }} />
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => { setEditing(g.id); setForm(g); setShowAdd(true); }} className="text-[#5E6A62] hover:text-[#184A31] p-1">
-                    <Edit3 className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => remove(g.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="font-display text-2xl">{formatINR(g.current_amount)}<span className="text-sm text-[#5E6A62]"> / {formatINR(g.target_amount)}</span></div>
-                <div className="h-2 bg-[#F2F0E9] mt-2 rounded-full">
-                  <div className="h-full bg-[#184A31] rounded-full" style={{ width: `${pct}%` }} />
-                </div>
-                <div className="text-xs text-[#5E6A62] mt-1.5 font-mono">{Math.round(pct)}% complete</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {showAdd && (
-        <Modal title={editing ? "Edit goal" : "New goal"} onClose={() => { setShowAdd(false); setEditing(null); }}>
-          <form onSubmit={submitGoal} className="space-y-3" data-testid="goal-form">
-            <Field label="Name" value={form.name || ""} onChange={(v) => setForm({ ...form, name: v })} required placeholder="e.g. Down payment for home" />
-            <Field label="Target amount (₹)" type="number" value={form.target_amount || ""} onChange={(v) => setForm({ ...form, target_amount: v })} required />
-            <Field label="Current amount (₹)" type="number" value={form.current_amount || ""} onChange={(v) => setForm({ ...form, current_amount: v })} />
-            <Field label="Target date" type="date" value={form.target_date || ""} onChange={(v) => setForm({ ...form, target_date: v })} />
-            <Field label="Category" value={form.category || ""} onChange={(v) => setForm({ ...form, category: v })} placeholder="car, home, retirement, care…" />
-            <button className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium" data-testid="goal-save-button">Save</button>
-          </form>
-        </Modal>
+                {/* Footer */}
+                <div className="flex items-center justify-between text-xs text-[#5E6A62]">
+                  <span>{memberName(g.member_id)}</span>
+                  {g.target_date && <span className={urg?.days != null && urg.days < 0 ? "text-[#C25942]" : ""}>{urg?.days != null && urg.days < 0 ? "Overdue" : `Due ${g.target_date}`}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {showFire && (
-        <Modal title="FIRE plan" onClose={() => setShowFire(false)}>
-          <form onSubmit={submitFire} className="space-y-3" data-testid="fire-form">
-            <Field label="Target corpus (₹)" type="number" value={fireForm.target_corpus || ""} onChange={(v) => setFireForm({ ...fireForm, target_corpus: v })} required placeholder="50000000" />
-            <Field label="Current corpus (₹)" type="number" value={fireForm.current_corpus || ""} onChange={(v) => setFireForm({ ...fireForm, current_corpus: v })} />
-            <Field label="Monthly savings (₹)" type="number" value={fireForm.monthly_savings || ""} onChange={(v) => setFireForm({ ...fireForm, monthly_savings: v })} required />
-            <Field label="Expected return %" type="number" step="0.1" value={fireForm.expected_return_pct || ""} onChange={(v) => setFireForm({ ...fireForm, expected_return_pct: v })} placeholder="11" />
-            <button className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium" data-testid="fire-save-button">Save FIRE plan</button>
+      {/* ── Add/Edit modal ── */}
+      {showAdd && (
+        <Modal title={editingId ? "Edit goal" : "Add goal"} onClose={closeModal}>
+          <form onSubmit={submit} className="space-y-3" data-testid="goal-form">
+            <Field label="Goal name" value={form.name || ""} onChange={v => setForm({ ...form, name: v })} required />
+            <Field label="Domain" as="select" value={form.domain || "personal"} onChange={v => setForm({ ...form, domain: v })}
+              options={DOMAINS.map(d => [d, d.charAt(0).toUpperCase() + d.slice(1)])} />
+            <Field label="Target amount (₹)" type="number" value={form.target_amount || ""} onChange={v => setForm({ ...form, target_amount: v })} required />
+            <Field label="Current amount (₹)" type="number" value={form.current_amount || 0} onChange={v => setForm({ ...form, current_amount: v })} />
+            <Field label="Target date" type="date" value={form.target_date || ""} onChange={v => setForm({ ...form, target_date: v })} />
+            <Field label="Member" as="select" value={form.member_id || defaultMemberId || ""}
+              onChange={v => setForm({ ...form, member_id: v })}
+              options={members.map(m => [m.id, m.name])} />
+            <button type="submit" className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium" data-testid="goal-save-btn">
+              {editingId ? "Update" : "Save"}
+            </button>
           </form>
         </Modal>
       )}
