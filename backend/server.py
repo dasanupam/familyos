@@ -106,6 +106,7 @@ class InvestmentIn(BaseModel):
     units: Optional[float] = None
     current_value: Optional[float] = None
     invested_value: Optional[float] = None
+    purchase_date: Optional[str] = None
 
 
 class LoanIn(BaseModel):
@@ -956,6 +957,7 @@ PATCH_COLLECTIONS = {
     "transactions": db.transactions, "investments": db.investments, "loans": db.loans,
     "labs": db.lab_results, "vitals": db.vitals, "prescriptions": db.prescriptions,
     "trips": db.trips, "career-events": db.career_events,
+    "career-roles": db.career_roles, "career-skills": db.career_skills,
 }
 
 
@@ -1142,13 +1144,27 @@ async def investments_xirr(current_user: dict = Depends(get_current_user)):
     inv = await db.investments.find({"user_id": fuid}, {"_id": 0}).to_list(500)
     out = []
     total_inv = total_cur = 0.0
+    today = date.today()
     for i in inv:
         cur  = i.get("current_value") or 0
         invv = i.get("invested_value") or 0
         gain = cur - invv
-        pct  = (gain / invv * 100) if invv > 0 else None
+        absolute_pct = (gain / invv * 100) if invv > 0 else None
+        # Compute CAGR when purchase_date is available
+        cagr = None
+        purchase_date_str = i.get("purchase_date")
+        if invv > 0 and cur > 0 and purchase_date_str:
+            try:
+                pd_date = date.fromisoformat(purchase_date_str)
+                years = (today - pd_date).days / 365.25
+                if years >= 0.083:  # at least 1 month
+                    cagr = ((cur / invv) ** (1 / years) - 1) * 100
+            except Exception:
+                pass
         out.append({"id": i["id"], "name": i["name"], "kind": i["kind"],
-                    "invested": invv, "current": cur, "gain": gain, "return_pct": pct})
+                    "invested": invv, "current": cur, "gain": gain,
+                    "return_pct": absolute_pct, "cagr": cagr,
+                    "purchase_date": purchase_date_str})
         total_inv += invv
         total_cur += cur
     overall = (total_cur - total_inv) / total_inv * 100 if total_inv > 0 else None

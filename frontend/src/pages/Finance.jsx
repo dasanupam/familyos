@@ -176,6 +176,12 @@ export default function Finance() {
           { k: "kind", label: "Type" },
           { k: "invested_value", label: "Invested", render: (v) => v ? formatINRFull(v) : "—", align: "right" },
           { k: "current_value", label: "Value", render: (v) => v ? formatINRFull(v) : "—", align: "right" },
+          { k: "current_value", label: "Return", render: (v, row) => {
+            const inv = row.invested_value; const cur = row.current_value;
+            if (!inv || !cur) return "—";
+            const pct = ((cur - inv) / inv * 100).toFixed(1);
+            return <span className={`font-mono text-xs ${cur >= inv ? "text-[#367A50]" : "text-[#C25942]"}`}>{cur >= inv ? "+" : ""}{pct}%</span>;
+          }, align: "right" },
           { k: "member_id", label: "Member", render: memberName },
         ]} onDelete={(r) => remove("investments", r.id)} onEdit={startEdit} testidPrefix="finance-inv" empty="No investments." />}
 
@@ -249,6 +255,7 @@ export default function Finance() {
             {tab === "investments" && <>
               <Field label="Name" value={form.name || ""} onChange={(v) => setForm({ ...form, name: v })} required />
               <Field label="Kind" as="select" value={form.kind || "mutual_fund"} onChange={(v) => setForm({ ...form, kind: v })} options={[["mutual_fund","Mutual fund"],["stock","Stock"],["fd","FD"],["crypto","Crypto"],["other","Other"]]} />
+              <Field label="Purchase date" type="date" value={form.purchase_date || ""} onChange={(v) => setForm({ ...form, purchase_date: v })} />
               <Field label="Invested (₹)" type="number" value={form.invested_value || ""} onChange={(v) => setForm({ ...form, invested_value: v })} />
               <Field label="Current value (₹)" type="number" value={form.current_value || ""} onChange={(v) => setForm({ ...form, current_value: v })} />
             </>}
@@ -323,7 +330,7 @@ function Table({ rows, cols, onDelete, onEdit, testidPrefix, empty }) {
             <tr key={r.id} className="border-b border-[#E5E2DC]/60 hover:bg-[#F2F0E9]/50" data-testid={`${testidPrefix}-row`}>
               {cols.map((c) => (
                 <td key={c.k} className={`px-5 md:px-6 py-3 ${c.align === "right" ? "text-right font-mono" : ""}`}>
-                  {c.render ? c.render(r[c.k]) : (r[c.k] ?? "—")}
+                  {c.render ? c.render(r[c.k], r) : (r[c.k] ?? "—")}
                 </td>
               ))}
               <td className="px-2 py-3 whitespace-nowrap">

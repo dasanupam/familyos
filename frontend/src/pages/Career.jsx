@@ -19,6 +19,7 @@ export default function Career() {
   const [skills, setSkills] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({});
+  const [editingId, setEditingId] = useState(null);
 
   const memberParam = activeMember === "family" ? "" : `?member_id=${activeMember}`;
   const defaultMemberId = activeMember === "family" ? members[0]?.id : activeMember;
@@ -36,19 +37,28 @@ export default function Career() {
     e.preventDefault();
     try {
       const body = { ...form, member_id: form.member_id || defaultMemberId };
-      if (tab === "roles") {
+      if (editingId) {
+        const kindMap = { timeline: "career-events", roles: "career-roles", skills: "career-skills" };
+        await api.patch(`/${kindMap[tab]}/${editingId}`, body);
+        toast.success("Updated");
+      } else if (tab === "roles") {
         await api.post("/career/roles", { ...body, ctc: body.ctc ? Number(body.ctc) : null });
+        toast.success("Role added");
       } else if (tab === "timeline") {
         await api.post("/career/events", { ...body, ctc: body.ctc ? Number(body.ctc) : null,
           date: body.date || new Date().toISOString().slice(0, 10), kind: body.kind || "achievement" });
+        toast.success("Event added");
       } else if (tab === "skills") {
         await api.post("/career/skills", { ...body, level: Number(body.level || 3) });
+        toast.success("Skill added");
       }
-      setShowAdd(false); setForm({});
-      refresh(); toast.success("Added");
-    } catch { toast.error("Add failed"); }
+      setShowAdd(false); setForm({}); setEditingId(null);
+      refresh();
+    } catch { toast.error("Save failed"); }
   };
 
+  const startEdit = (item) => { setEditingId(item.id); setForm(item); setShowAdd(true); };
+  const closeModal = () => { setShowAdd(false); setForm({}); setEditingId(null); };
   const remove = async (kind, id) => { await api.delete(`/career/${kind}/${id}`); refresh(); };
   const memberName = (id) => members.find((m) => m.id === id)?.name || "—";
 
@@ -80,7 +90,7 @@ export default function Career() {
             {label}
           </button>
         ))}
-        <button onClick={() => { setShowAdd(true); setForm({}); }} data-testid="career-add-button"
+        <button onClick={() => { setShowAdd(true); setForm({}); setEditingId(null); }} data-testid="career-add-button"
           className="ml-auto px-4 py-2 rounded-full text-sm font-medium bg-[#D19B4C] hover:bg-[#c18e3f] text-[#111812] flex items-center gap-1.5">
           <Plus className="h-4 w-4" /> Add
         </button>
@@ -107,9 +117,14 @@ export default function Career() {
                         {ev.ctc && <div className="text-sm font-mono mt-1">{formatINRFull(ev.ctc)} CTC</div>}
                         {ev.notes && <div className="text-sm text-[#5E6A62] mt-1">{ev.notes}</div>}
                       </div>
-                      <button onClick={() => remove("events", ev.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex gap-1">
+                        <button onClick={() => startEdit(ev)} className="text-[#5E6A62]/50 hover:text-[#5E6A62] p-1" data-testid="career-event-edit">
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => remove("events", ev.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -149,9 +164,14 @@ export default function Career() {
                     {r.ctc && <div className="text-sm font-mono mt-2">{formatINRFull(r.ctc)} CTC</div>}
                     {r.notes && <div className="text-sm text-[#5E6A62] mt-2">{r.notes}</div>}
                   </div>
-                  <button onClick={() => remove("roles", r.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => startEdit(r)} className="text-[#5E6A62]/50 hover:text-[#5E6A62] p-1" data-testid="career-role-edit">
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => remove("roles", r.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -173,6 +193,9 @@ export default function Career() {
                       <div key={n} className={`h-1.5 w-4 rounded-full ${n <= s.level ? "bg-[#184A31]" : "bg-[#E5E2DC]"}`} />
                     ))}
                   </div>
+                  <button onClick={() => startEdit(s)} className="text-[#5E6A62]/50 hover:text-[#5E6A62] p-1" data-testid="career-skill-edit">
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => remove("skills", s.id)} className="text-[#C25942]/50 hover:text-[#C25942] p-1">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -183,7 +206,7 @@ export default function Career() {
       )}
 
       {showAdd && (
-        <Modal title={`Add ${tab === "timeline" ? "event" : tab.slice(0, -1)}`} onClose={() => setShowAdd(false)}>
+        <Modal title={editingId ? `Edit ${tab === "timeline" ? "event" : tab.slice(0, -1)}` : `Add ${tab === "timeline" ? "event" : tab.slice(0, -1)}`} onClose={closeModal}>
           <form onSubmit={submit} className="space-y-3" data-testid="career-form">
             <SelectMember value={form.member_id || defaultMemberId} onChange={(v) => setForm({ ...form, member_id: v })} members={members} />
             {tab === "timeline" && (
@@ -214,7 +237,7 @@ export default function Career() {
                 <Field label="Level (1-5)" type="number" min="1" max="5" value={form.level || 3} onChange={(v) => setForm({ ...form, level: v })} />
               </>
             )}
-            <button className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium" data-testid="career-save-button">Save</button>
+            <button className="w-full bg-[#184A31] text-white py-2.5 rounded-full font-medium" data-testid="career-save-button">{editingId ? "Update" : "Save"}</button>
           </form>
         </Modal>
       )}
