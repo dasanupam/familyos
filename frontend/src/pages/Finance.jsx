@@ -202,7 +202,14 @@ export default function Finance() {
         else if (tab === "budget") await api.post("/finance/budget", { ...body, budgeted_amount: Number(body.budgeted_amount || 0), month: body.month || budgetMonth });
       }
       setShowAdd(false); setForm({}); setEditingId(null);
-      await refresh(); toast.success(editingId ? "Updated" : "Added");
+      if (tab === "budget") {
+        const mp = memberParam;
+        const q = mp ? `${mp}&month=${budgetMonth}` : `?month=${budgetMonth}`;
+        api.get(`/finance/budget${q}`).then((r) => setBudgets(r.data)).catch(() => {});
+      } else {
+        await refresh();
+      }
+      toast.success(editingId ? "Updated" : "Added");
     } catch { toast.error("Save failed"); }
   };
 
@@ -347,7 +354,7 @@ export default function Finance() {
           { k: "policy_end", label: "Expires" },
           { k: "member_id", label: "Member", render: memberName },
         ]} onDelete={(r) => remove("insurance", r.id)} onEdit={startEdit} testidPrefix="finance-ins"
-        rowClass={(r) => { const d = daysUntil(r.policy_end); return d != null && d >= 0 && d <= 30 ? "bg-[#FDF3F1] border-[#C25942]/30" : ""; }}
+        rowClass={(r) => { const d = daysUntil(r.policy_end); return d != null && d >= 0 && d <= 30 ? "bg-red-50 border-l-2 border-l-[#C25942]" : ""; }}
         empty="No insurance policies." />}
 
         {tab === "subscriptions" && <Table rows={filteredRows()} cols={[
