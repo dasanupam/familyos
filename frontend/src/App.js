@@ -25,7 +25,7 @@ function Protected({ children }) {
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center text-[#5E6A62]">Loading…</div>;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/overview" replace />;
   return children;
 }
 
@@ -35,20 +35,22 @@ export default function App() {
       <BrowserRouter>
         <Toaster richColors position="top-right" />
         <Routes>
-          <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+          <Route path="/login"    element={<PublicOnly><Login /></PublicOnly>} />
           <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
           <Route path="/" element={<Protected><AppShell /></Protected>}>
-            <Route index element={<Overview />} />
-            <Route path="finance" element={<Finance />} />
-            <Route path="health" element={<Health />} />
-            <Route path="goals" element={<Goals />} />
+            {/* Redirect bare / to /overview */}
+            <Route index element={<Navigate to="/overview" replace />} />
+            <Route path="overview"  element={<Overview />} />
+            <Route path="finance"   element={<Finance />} />
+            <Route path="health"    element={<Health />} />
+            <Route path="goals"     element={<Goals />} />
             <Route path="documents" element={<Documents />} />
-            <Route path="family" element={<Family />} />
-            <Route path="travel" element={<Travel />} />
-            <Route path="career" element={<Career />} />
+            <Route path="family"    element={<Family />} />
+            <Route path="travel"    element={<Travel />} />
+            <Route path="career"    element={<Career />} />
             <Route path="household" element={<FamilyOverview />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      nav("/");
+      nav("/overview");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Login failed");
     } finally {

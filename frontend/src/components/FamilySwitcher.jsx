@@ -3,7 +3,7 @@ import { ChevronDown, Users } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 export default function FamilySwitcher() {
-  const { members, activeMember, setActiveMember } = useAuth();
+  const { user, members, activeMember, setActiveMember } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -13,9 +13,13 @@ export default function FamilySwitcher() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const activeLabel = activeMember === "family"
-    ? "Whole family"
-    : (members.find((m) => m.id === activeMember)?.name || "Whole family");
+  const activeLabel =
+    activeMember === "family"
+      ? "Whole family"
+      : (members.find((m) => m.id === activeMember)?.name || "Whole family");
+
+  // Only admin users see the switcher
+  if (!user || user.role === "member") return null;
 
   return (
     <div className="relative" ref={ref}>
@@ -37,7 +41,9 @@ export default function FamilySwitcher() {
           <button
             onClick={() => { setActiveMember("family"); setOpen(false); }}
             data-testid="family-switcher-option-family"
-            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#F2F0E9] flex items-center gap-2 ${activeMember === "family" ? "bg-[#F2F0E9]" : ""}`}
+            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#F2F0E9] flex items-center gap-2 ${
+              activeMember === "family" ? "bg-[#F2F0E9]" : ""
+            }`}
           >
             <Users className="h-3.5 w-3.5 text-[#184A31]" />
             Whole family
@@ -48,12 +54,11 @@ export default function FamilySwitcher() {
               key={m.id}
               onClick={() => { setActiveMember(m.id); setOpen(false); }}
               data-testid={`family-switcher-option-${m.id}`}
-              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#F2F0E9] flex items-center gap-2 ${activeMember === m.id ? "bg-[#F2F0E9]" : ""}`}
+              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#F2F0E9] flex items-center gap-2 ${
+                activeMember === m.id ? "bg-[#F2F0E9]" : ""
+              }`}
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ background: m.color || "#184A31" }}
-              />
+              <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: m.color || "#184A31" }} />
               {m.name}
               <span className="ml-auto text-xs text-[#5E6A62]">{m.relation}</span>
             </button>
