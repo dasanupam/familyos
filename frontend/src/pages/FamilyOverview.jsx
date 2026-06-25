@@ -41,7 +41,7 @@ function HouseholdNotifications() {
           const cfg = SEVERITY_COLORS[alert.severity] || SEVERITY_COLORS.info;
           const Icon = cfg.icon;
           return (
-            <Link to={alert.link || "/health"} key={i}
+            <Link to={alert.link || "/health"} key={`${alert.type || 'alert'}-${i}`}
               className="flex items-start gap-3 rounded-xl border px-3 py-2.5 hover:opacity-90 transition"
               style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}
               data-testid={`household-alert-${i}`}>

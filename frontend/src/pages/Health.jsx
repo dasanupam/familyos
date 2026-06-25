@@ -78,7 +78,7 @@ export default function Health() {
       setVitals(v.data); setLabs(l.data); setPres(p.data); setMeds(m.data);
       setSupps(s.data); setAppts(a.data); setFitness(fi.data); setVacs(va.data);
     } catch { toast.error("Failed to load health data"); }
-  }, [memberParam]);
+  }, [memberParam]); // eslint-disable-line react-hooks/exhaustive-deps -- api is a stable singleton
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -96,29 +96,36 @@ export default function Health() {
     return acc;
   }, [vitals]);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const upcomingAppts = appts.filter((a) => a.appointment_date >= today);
-  const pastAppts = appts.filter((a) => a.appointment_date < today);
-  const flaggedLabs = labs.filter(isLabFlagged);
-  const lastPresDate = pres.length > 0
-    ? [...pres].sort((a, b) => b.date.localeCompare(a.date))[0].date
-    : null;
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const upcomingAppts = useMemo(() => appts.filter((a) => a.appointment_date >= today), [appts, today]);
+  const pastAppts = useMemo(() => appts.filter((a) => a.appointment_date < today), [appts, today]);
+  const flaggedLabs = useMemo(() => labs.filter(isLabFlagged), [labs]);
+  const lastPresDate = useMemo(() =>
+    pres.length > 0 ? [...pres].sort((a, b) => b.date.localeCompare(a.date))[0].date : null,
+  [pres]);
 
-  const getTabData = () => ({
+  const tabData = useMemo(() => ({
     vitals, labs, prescriptions: pres, medications: meds,
     supplements: supps, appointments: appts, fitness, vaccinations: vacs,
-  })[tab] || [];
+  })[tab] || [], [tab, vitals, labs, pres, meds, supps, appts, fitness, vacs]);
 
-  const filteredRows = () => {
-    let rows = getTabData();
+  const filteredRows = useMemo(() => {
+    let rows = tabData;
     if (tab === "labs" && flaggedOnly) rows = rows.filter(isLabFlagged);
     if (!search) return rows;
     const q = search.toLowerCase();
     return rows.filter((r) => JSON.stringify(r).toLowerCase().includes(q));
-  };
+  }, [tabData, tab, flaggedOnly, search]);
+
+  const filteredUpcoming = useMemo(() =>
+    upcomingAppts.filter((r) => !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase())),
+  [upcomingAppts, search]);
+
+  const filteredPast = useMemo(() =>
+    pastAppts.filter((r) => !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase())),
+  [pastAppts, search]);
 
   const submit = async (e) => {
-    e.preventDefault();
     try {
       const body = {
         ...form,
@@ -269,7 +276,7 @@ export default function Health() {
                   ))}
               </div>
             )}
-            <Table rows={filteredRows()} cols={[
+            <Table rows={filteredRows} cols={[
               { k: "date", label: "Date" },
               { k: "kind", label: "Type", render: (v) => VITAL_LABELS[v] || v },
               { k: "value", label: "Value" },
@@ -326,7 +333,7 @@ export default function Health() {
                   })}
               </div>
             )}
-            <Table rows={filteredRows()} cols={[
+            <Table rows={filteredRows} cols={[
               { k: "date", label: "Date" },
               { k: "test", label: "Test" },
               { k: "value", label: "Value", align: "right" },
@@ -339,7 +346,7 @@ export default function Health() {
         )}
 
         {tab === "prescriptions" && (
-          <Table rows={filteredRows()} cols={[
+          <Table rows={filteredRows} cols={[
             { k: "date", label: "Date" },
             { k: "doctor", label: "Doctor" },
             { k: "medications", label: "Medications", render: (v) => (v || []).map((m) => m.name).join(", ") || "—" },
@@ -372,7 +379,7 @@ export default function Health() {
         )}
 
         {tab === "supplements" && (
-          <Table rows={filteredRows()} cols={[
+          <Table rows={filteredRows} cols={[
             { k: "name", label: "Supplement" },
             { k: "dose", label: "Dose" },
             { k: "frequency", label: "Frequency" },
@@ -386,13 +393,13 @@ export default function Health() {
           <>
             <div className="label-eyebrow text-[#184A31] mb-2" data-testid="appts-upcoming-label">Upcoming</div>
             <Table
-              rows={upcomingAppts.filter((r) => !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase()))}
+              rows={filteredUpcoming}
               cols={apptCols} onDelete={(r) => remove(r.id)} onEdit={startEdit} empty="No upcoming appointments." />
             {pastAppts.length > 0 && (
               <>
                 <div className="label-eyebrow text-[#5E6A62] mt-6 mb-2" data-testid="appts-past-label">Past</div>
                 <Table
-                  rows={pastAppts.filter((r) => !search || JSON.stringify(r).toLowerCase().includes(search.toLowerCase()))}
+                  rows={filteredPast}
                   cols={apptCols} onDelete={(r) => remove(r.id)} onEdit={startEdit} empty="" />
               </>
             )}
@@ -400,7 +407,7 @@ export default function Health() {
         )}
 
         {tab === "fitness" && (
-          <Table rows={filteredRows()} cols={[
+          <Table rows={filteredRows} cols={[
             { k: "date", label: "Date" },
             { k: "workout_type", label: "Workout" },
             { k: "duration_mins", label: "Duration (min)", align: "right" },
@@ -411,7 +418,7 @@ export default function Health() {
         )}
 
         {tab === "vaccinations" && (
-          <Table rows={filteredRows()} cols={[
+          <Table rows={filteredRows} cols={[
             { k: "vaccine_name", label: "Vaccine" },
             { k: "date_administered", label: "Date" },
             { k: "dose_number", label: "Dose #" },

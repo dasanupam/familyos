@@ -12,13 +12,15 @@ import os
 import uuid
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+TEST_ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "anupam@familyos.app")
+TEST_ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Test@1234")
 
 
 @pytest.fixture(scope="module")
 def auth_token():
     resp = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "anupam@familyos.app",
-        "password": "Test@1234"
+        "email": TEST_ADMIN_EMAIL,
+        "password": TEST_ADMIN_PASSWORD,
     })
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     data = resp.json()

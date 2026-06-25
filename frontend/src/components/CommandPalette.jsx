@@ -93,7 +93,7 @@ export default function CommandPalette({ open, onClose }) {
             const Icon = TYPE_ICONS[r.type] || Search;
             const color = TYPE_COLORS[r.type] || "#184A31";
             return (
-              <button key={i} onClick={() => go(r.link)}
+              <button key={`${r.type}-${r.label}-${i}`} onClick={() => go(r.link)}
                 className={`w-full flex items-center gap-3 px-5 py-3 text-left transition hover:bg-[#F2F0E9] dark:hover:bg-[#1E2E24] ${i === activeIdx ? "bg-[#F2F0E9] dark:bg-[#1E2E24]" : ""}`}
                 data-testid={`search-result-${i}`}>
                 <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}15` }}>

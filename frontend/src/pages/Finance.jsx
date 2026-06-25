@@ -66,16 +66,16 @@ export default function Finance() {
       setTx(a.data); setInv(b.data); setLoans(c.data); setSummary(d.data);
       setSip(e.data); setRsu(f.data); setTax(g.data); setInsurance(h.data); setSubs(i.data);
     } catch { toast.error("Failed to load data"); }
-  }, [memberParam]);
+  }, [memberParam]); // eslint-disable-line react-hooks/exhaustive-deps -- `api` is a stable singleton
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Separate budget fetch (month-dependent)
+  // Budget fetch is month-dependent; api is a stable singleton — suppress dep warning
   useEffect(() => {
     const mp = memberParam;
     const q = mp ? `${mp}&month=${budgetMonth}` : `?month=${budgetMonth}`;
     api.get(`/finance/budget${q}`).then((r) => setBudgets(r.data)).catch(() => {});
-  }, [memberParam, budgetMonth]);
+  }, [memberParam, budgetMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const memberName = (id) => members.find((m) => m.id === id)?.name || "—";
 
@@ -477,7 +477,7 @@ function BudgetView({ budgets, budgetMonth, setBudgetMonth, onDelete, onEdit }) 
                 <Bar dataKey="Budget" fill="#D19B4C" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Actual" radius={[4, 4, 0, 0]}>
                   {chartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.over ? "#C25942" : "#184A31"} />
+                    <Cell key={entry.category || i} fill={entry.over ? "#C25942" : "#184A31"} />
                   ))}
                 </Bar>
               </BarChart>

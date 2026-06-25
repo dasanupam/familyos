@@ -8,8 +8,8 @@ import os
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
-ADMIN_EMAIL = "anupam@familyos.app"
-ADMIN_PASSWORD = "Test@1234"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "anupam@familyos.app")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Test@1234")
 ANUPAM_MEMBER_ID = "4c497c38-efef-4ca3-8528-0c442cad42e2"
 
 

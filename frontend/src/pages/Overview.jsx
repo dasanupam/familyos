@@ -99,7 +99,7 @@ function FamilyHealthPanel({ members }) {
         setRows(p => ({ ...p, [m.id]: { bp: bpEntry?.value, bpDate: bpEntry?.date, weight: wtEntry?.value, weightUnit: wtEntry?.unit || "kg", activeMeds: med.data?.count ?? (Array.isArray(med.data) ? med.data.length : 0), nextAppt, daysUntil } }));
       }).catch(() => {});
     });
-  }, [members, today]);
+  }, [members, today]); // eslint-disable-line react-hooks/exhaustive-deps -- api is a stable singleton
 
   return (
     <div className="card-surface overflow-hidden">
@@ -186,7 +186,7 @@ export default function Overview() {
     const upcomingAppts = (appts.data || []).filter(a => a.appointment_date >= today).sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
     const efData = Array.isArray(ef.data) ? ef.data[0] : ef.data;
     setExtraStats({ unvestedRSU, nextEMI: upcomingLoans[0], nextAppt: upcomingAppts[0], efData });
-  }, [activeMember, today]);
+  }, [activeMember, today]); // eslint-disable-line react-hooks/exhaustive-deps -- api is a stable singleton
 
   useEffect(() => { refresh(); }, [refresh]);
 
