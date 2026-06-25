@@ -57,14 +57,24 @@ Added end-to-end:
 - **Net-worth time series**: `POST /api/finance/snapshot` saves a daily snapshot; `GET /api/finance/net-worth-series` lists them.
 - **Investment returns**: `GET /api/finance/investments/xirr` returns per-holding + overall absolute return %.
 
+## Iteration D — 2026-02 (this session)
+- **Part 5 — Plan Upload Auto-Update (Diff/Confirm Modal)**:
+  - `/api/inbox/file` gains `dry_run=true` form param: parses document but does NOT create records, returns `{proposed: true, parsed, document_id}`.
+  - New `/api/inbox/apply` endpoint: accepts `{parsed, doc_id, member_id, selected_types[]}`, applies only the user-selected record types, writes to `update_log` collection.
+  - `UniversalInbox.jsx` rewritten with `DiffConfirmView` component: per-type checkboxes, expand/collapse preview of each record, Apply count button, Skip.
+  - Text inbox unchanged (still auto-saves immediately — appropriate for quick one-liners).
+- **Image OCR for Lab Photos (Gemini Vision)**:
+  - Already wired via `parse_image_file()` → Gemini 2.5 Flash multimodal. Now enhanced with lab-specific prompting (extract every parameter, unit, reference range).
+  - Accepted file types extended to include `.heic` / `.heif` (iPhone photos).
+  - "Vision AI" badge shown in diff confirm modal and result card when processed via Gemini.
+
 ## Backlog (remaining open items)
-- True XIRR with per-lot cashflows → now using CAGR when purchase_date set (upgraded 2026-02)
-- Auto-snapshot net-worth on a schedule
-- Weekly digest email (Resend)
-- Image OCR for lab photos (Gemini multimodal)
+- Auto-snapshot net-worth on a schedule (cron / background task)
+- Weekly digest email (Resend integration)
 - PWA install + push notifications
-- Shared household notifications
-- Part 5: Plan Upload → Auto-update with diff/confirm modal and update_log
+- Shared household notifications ("Amal's HbA1c is above 6.5%")
+- True per-lot XIRR (currently CAGR approximation when purchase_date set)
+
 
 ## Iteration C — 2026-02 (this session)
 - **Career inline edit**: Edit buttons (pencil) on timeline events, role cards, and skills. PATCH via `/api/career-events`, `/api/career-roles`, `/api/career-skills`.
