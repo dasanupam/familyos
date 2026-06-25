@@ -66,7 +66,7 @@ export default function Career() {
   const salaryProgression = roles
     .filter((r) => r.ctc)
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
-    .map((r) => ({ date: r.start_date, ctc: r.ctc, title: r.title, company: r.company }));
+    .map((r) => ({ id: r.id, date: r.start_date, ctc: r.ctc, title: r.title, company: r.company }));
 
   return (
     <div className="space-y-6" data-testid="career-page">
@@ -143,7 +143,7 @@ export default function Career() {
                   const max = Math.max(...salaryProgression.map((x) => x.ctc));
                   const h = (p.ctc / max) * 100;
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                    <div key={p.id} className="flex-1 flex flex-col items-center justify-end h-full">
                       <div className="text-[10px] font-mono text-[#5E6A62] mb-1">{formatINR(p.ctc)}</div>
                       <div className="w-full bg-[#184A31] rounded-t" style={{ height: `${h}%` }} title={`${p.title} @ ${p.company}`} />
                       <div className="text-[10px] text-[#5E6A62] mt-1 truncate w-full text-center">{p.date.slice(0, 4)}</div>

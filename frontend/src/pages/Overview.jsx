@@ -1,9 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api, formatINR, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { TrendingUp, TrendingDown, Wallet, Target, Activity, Sparkles, ArrowUpRight, FileText, AlertTriangle, Bell } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid } from "recharts";
 import { Link } from "react-router-dom";
+
+const CountBadges = ({ counts }) => {
+  const entries = useMemo(() => Object.entries(counts || {}).filter(([, v]) => v > 0), [counts]);
+  if (!entries.length) return null;
+  return (
+    <div className="text-xs text-[#5E6A62] hidden sm:flex gap-2">
+      {entries.map(([k, v]) => (
+        <span key={k} className="bg-[#F2F0E9] px-2 py-0.5 rounded">{k}: {v}</span>
+      ))}
+    </div>
+  );
+};
 
 const Stat = ({ label, value, sub, tone, testid }) => (
   <div className="card-surface p-5 md:p-6" data-testid={testid}>
@@ -49,8 +61,8 @@ export default function Overview() {
       {alerts.length > 0 && (
         <div className="card-surface border border-[#D19B4C]/40 p-4 flex flex-col gap-2" data-testid="alerts-banner">
           <div className="flex items-center gap-2 mb-1"><Bell className="h-4 w-4 text-[#D19B4C]" /><span className="label-eyebrow text-[#D19B4C]">{alerts.length} Alert{alerts.length > 1 ? "s" : ""}</span></div>
-          {alerts.slice(0, 3).map((a, i) => (
-            <div key={i} className={`flex items-start gap-2 text-sm py-1 border-b border-[#E5E2DC] last:border-0`}>
+          {alerts.slice(0, 3).map((a) => (
+            <div key={a.type + '-' + a.date + '-' + (a.id || '')} className={`flex items-start gap-2 text-sm py-1 border-b border-[#E5E2DC] last:border-0`}>
               <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${a.severity === "error" ? "text-[#C25942]" : "text-[#D19B4C]"}`} />
               <div className="flex-1">{a.title}</div>
               <div className="text-xs text-[#5E6A62]">{a.date}</div>
@@ -250,11 +262,7 @@ export default function Overview() {
                   <div className="text-sm text-[#111812] truncate">{i.parsed?.summary || i.input_preview}</div>
                   <div className="text-xs text-[#5E6A62]">{new Date(i.created_at).toLocaleString("en-IN")}</div>
                 </div>
-                <div className="text-xs text-[#5E6A62] hidden sm:flex gap-2">
-                  {Object.entries(i.counts || {}).filter(([, v]) => v > 0).map(([k, v]) => (
-                    <span key={k} className="bg-[#F2F0E9] px-2 py-0.5 rounded">{k}: {v}</span>
-                  ))}
-                </div>
+                <CountBadges counts={i.counts} />
               </div>
             ))}
           </div>

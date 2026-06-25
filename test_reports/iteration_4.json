@@ -1,0 +1,77 @@
+{
+  "summary": "Iteration E - Code Quality Fixes Regression Testing. Backend: 22/22 tests pass. Frontend: Most fixes verified. One remaining issue: Career salary chart key fix is incomplete (collisions still occur when roles share same start_date+company). Finance table has a pre-existing key collision not in this PR scope.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Career.jsx - Salary Progression Chart",
+        "issue": "Duplicate key warnings still fired: key={p.date + '-' + (p.company || i)} collides when multiple roles share same start_date AND same company. The fallback `i` is only used when p.company is falsy, so identical date+company combos still produce the same key. Fix: include r.id in salaryProgression mapped objects (add id field to map, use key={p.id}).",
+        "selector": "Career > Roles tab > salary progression chart bars",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Finance.jsx - Investments Table",
+        "issue": "PRE-EXISTING (not in this PR scope): Duplicate key warning in Finance investments Table because two column definitions have k='current_value' (Value column AND Return column). cols.map((c) => <th key={c.k}> and <td key={c.k}> produce duplicate keys. Fix: use c.label as key, or add a unique 'id' field to each col definition.",
+        "selector": "Finance > Investments tab table headers and cells",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_inbox_plan_upload.py",
+    "/app/test_reports/pytest/pytest_results_e.xml"
+  ],
+  "action_items": [
+    "Fix Career salary progression chart key: include `id` in salaryProgression mapped objects so key={p.id} instead of date+company compound. The `|| i` fallback only activates when company is falsy — identical date+company combos still collide.",
+    "Fix Finance investments Table key collision (pre-existing): Two columns both have k='current_value'. Use c.label as key for cols.map in Table component, or add unique id to each col definition."
+  ],
+  "critical_code_review_comments": [
+    "Career.jsx line 69: salaryProgression map does not include `id` field. The key at line 146 `key={p.date + '-' + (p.company || i)}` fails when roles have same start_date + company (test data shows this). Proper fix: .map((r) => ({ id: r.id, date: r.start_date, ctc: r.ctc, title: r.title, company: r.company })) and key={p.id}.",
+    "Finance.jsx investments cols config (lines 174-186): Two entries with k='current_value' cause duplicate keys in Table component's cols.map. Use k='return_pct' or add unique identifiers per column."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (22/22 passed - is True → == True changes working)",
+    "frontend": "87% - 7/8 features verified passing, Career salary chart key fix incomplete"
+  },
+  "features_tested": {
+    "overview_no_key_warnings": "PASS - No React key-prop warnings on Overview page. Alerts banner key={a.type + '-' + a.date + '-' + (a.id || '')} is correct.",
+    "career_salary_chart_key": "PARTIAL FAIL - key={p.date + '-' + (p.company || i)} still causes collisions with test data (multiple roles same date+company)",
+    "career_inline_edit": "PASS - Edit buttons work, modal opens with correct pre-filled data",
+    "universal_inbox_item_key": "PASS - DiffConfirmView expanded records key={t.key + '-' + i} works, no key warnings",
+    "result_card_usememo": "PASS - ResultCard counts display correctly after text submit (transactions +1) and after partial apply (lab_results +1)",
+    "count_badges_usememo": "PASS - CountBadges component uses useMemo correctly, badge pills visible",
+    "finance_investments_return_pct": "PASS - Return % column renders correctly (+25.0% in green color)",
+    "inbox_text_submit": "PASS - Text submission returns AI-processed result with counts",
+    "inbox_file_dry_run": "PASS - File upload shows DiffConfirmView with parsed records",
+    "inbox_diff_confirm_checkboxes": "PASS - Transactions and Lab Results checkboxes both appear",
+    "inbox_diff_expand_records": "PASS - Expand button shows individual records list",
+    "inbox_apply_partial": "PASS - Deselecting Transactions → Apply button shows '1 record'; only lab_results applied",
+    "inbox_apply_full_flow": "PASS - Apply button correctly saves lab results, shows ResultCard with document stored",
+    "backend_is_true_fix": "PASS - All 22 tests pass with == True / != True changes (was is True / is not True)"
+  },
+  "test_credentials": "Admin: anupam@familyos.app / Test@1234",
+  "seed_data_creation": "Test text submission (salary ₹75k), test file uploads (salary ₹185k + lab, salary ₹150k + HbA1c) created during UI testing.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration E tested code quality fixes. Backend 22/22 passing. Two key-prop issues remain: (1) Career salary progression chart key collides when roles share same start_date + company - fix by including r.id in salaryProgression .map(). (2) Finance investments Table has pre-existing duplicate key issue with two columns having k='current_value'. All UniversalInbox flows work. Finance investments Return % column works. Career inline edit works. All useMemo changes work correctly.",
+  "rca_of_issues": {
+    "career_key_regression": {
+      "issue": "Career salary progression chart still shows duplicate key warnings",
+      "root_cause": "The key formula key={p.date + '-' + (p.company || i)} uses array index i as fallback ONLY when p.company is falsy. When p.company is truthy (e.g. 'Test Corp'), i is ignored. If two roles have same start_date and same company, their keys collide.",
+      "reproduction": "Have 2+ roles with identical start_date and company values with CTC set",
+      "fix": "Change salaryProgression .map() at line 69 to include id: r.id, then use key={p.id} at line 146"
+    },
+    "finance_key_regression": {
+      "issue": "Finance investments table shows 4 duplicate key warnings",
+      "root_cause": "Investments table column definitions have two entries with k='current_value' (the Value column and the Return column). The Table component uses key={c.k} for both th and td cells.",
+      "reproduction": "Navigate to Finance > Investments tab",
+      "fix": "Change Return column k to 'return_pct' or any unique string, OR use c.label as key in Table component's cols.map"
+    }
+  }
+}

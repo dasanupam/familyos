@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { X, Upload, Send, Loader2, FileText, Check, Eye, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
@@ -113,7 +113,7 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
               {isOpen && (
                 <div className="px-3 pb-3 space-y-1 border-t border-[#E5E2DC] pt-2">
                   {items.map((item, i) => (
-                    <div key={i} className="text-xs text-[#5E6A62] bg-white rounded-lg px-2.5 py-1.5 border border-[#E5E2DC] truncate">
+                    <div key={t.key + '-' + i} className="text-xs text-[#5E6A62] bg-white rounded-lg px-2.5 py-1.5 border border-[#E5E2DC] truncate">
                       {previewRecord(t.key, item)}
                     </div>
                   ))}
@@ -150,6 +150,10 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
 
 function ResultCard({ result }) {
   const isVision = result.parsed?._source === "vision";
+  const countEntries = useMemo(
+    () => Object.entries(result.counts || {}).filter(([, v]) => v > 0),
+    [result.counts]
+  );
   return (
     <div className="card-surface p-4 mt-2" data-testid="inbox-last-result">
       <div className="flex items-center gap-2 text-[#367A50]">
@@ -161,16 +165,14 @@ function ResultCard({ result }) {
           </span>
         )}
       </div>
-      {result.counts && Object.values(result.counts).some((v) => v > 0) && (
+      {countEntries.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-          {Object.entries(result.counts)
-            .filter(([, v]) => v > 0)
-            .map(([k, v]) => (
-              <div key={k} className="text-xs bg-[#F2F0E9] border border-[#E5E2DC] rounded-lg px-2.5 py-1.5">
-                <span className="text-[#5E6A62]">{k.replace("_", " ")}</span>
-                <span className="ml-1.5 font-mono font-semibold text-[#184A31]">+{v}</span>
-              </div>
-            ))}
+          {countEntries.map(([k, v]) => (
+            <div key={k} className="text-xs bg-[#F2F0E9] border border-[#E5E2DC] rounded-lg px-2.5 py-1.5">
+              <span className="text-[#5E6A62]">{k.replace("_", " ")}</span>
+              <span className="ml-1.5 font-mono font-semibold text-[#184A31]">+{v}</span>
+            </div>
+          ))}
         </div>
       )}
       {result.document_id && (

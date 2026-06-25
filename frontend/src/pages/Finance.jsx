@@ -176,7 +176,7 @@ export default function Finance() {
           { k: "kind", label: "Type" },
           { k: "invested_value", label: "Invested", render: (v) => v ? formatINRFull(v) : "—", align: "right" },
           { k: "current_value", label: "Value", render: (v) => v ? formatINRFull(v) : "—", align: "right" },
-          { k: "current_value", label: "Return", render: (v, row) => {
+          { k: "_return", label: "Return", render: (_v, row) => {
             const inv = row.invested_value; const cur = row.current_value;
             if (!inv || !cur) return "—";
             const pct = ((cur - inv) / inv * 100).toFixed(1);
