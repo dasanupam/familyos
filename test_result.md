@@ -205,11 +205,14 @@ frontend:
     file: "frontend/src/pages/Login.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Login and Register navigate to /overview. PublicOnly redirects to /overview. App.js has /overview route."
+      - working: true
+        agent: "testing"
+        comment: "VERIFIED: Root URL (/) redirects to /login when not logged in. After admin login (anupam@familyos.app), URL is /overview. After member login (abhilasha@familyos.app), URL is /overview. Login redirect flow working correctly."
 
   - task: "RBAC nav: Family/Household hidden for members; switcher hidden"
     implemented: true
@@ -217,11 +220,14 @@ frontend:
     file: "frontend/src/components/AppShell.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "AppShell uses ADMIN_NAV vs MEMBER_NAV. FamilySwitcher returns null for member-role users."
+      - working: true
+        agent: "testing"
+        comment: "VERIFIED: Admin navbar shows all 9 items (Overview, Household, Finance, Health, Travel, Career, Goals & FIRE, Documents, Family) + Family Switcher visible. Member navbar shows 7 items (Overview, Finance, Health, Travel, Career, Goals & FIRE, Documents) - Family and Household nav items NOT present. Family Switcher NOT visible for member. 'Member view' badge displayed for member. RBAC navigation working correctly."
 
   - task: "auth.jsx stores access_token, handles role + activeMember"
     implemented: true
@@ -229,27 +235,40 @@ frontend:
     file: "frontend/src/lib/auth.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Uses data.access_token. Member-role users get activeMember forced to linked_member_id."
+      - working: true
+        agent: "testing"
+        comment: "VERIFIED: Auth flow working correctly. Admin and member logins successful. Role-based UI rendering working. Overview and Finance pages load without errors."
+  
+  - task: "Frontend service startup (webpack-dev-server compatibility)"
+    implemented: true
+    working: true
+    file: "frontend/package.json, frontend/craco.config.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Frontend failing to start due to webpack-dev-server v5 incompatibility with react-scripts 5.0.1. Error: 'options has an unknown property onAfterSetupMiddleware'."
+      - working: true
+        agent: "testing"
+        comment: "FIXED: Removed webpack-dev-server v5.2.4 resolution from package.json, allowing v4.15.2 to be used (compatible with react-scripts 5.0.1). Also commented out visual-edits wrapper in craco.config.js. Frontend now starts successfully."
 
 metadata:
   created_by: "main_agent"
-  version: "2.1"
-  test_sequence: 2
+  version: "2.2"
+  test_sequence: 3
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Auth returns access_token"
-    - "Seed accounts: anupam@lifeos.local and abhilasha@lifeos.local both login"
-    - "RBAC: GET /api/members returns 403 for member-role user"
-    - "LabResultIn: POST /api/health/labs without member_id uses linked_member_id"
-    - "Data isolation: transactions for Abhilasha only return her records"
+  current_focus: []
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
@@ -301,3 +320,38 @@ agent_communication:
       
       All backend functionality verified and working correctly.
       Test file: /app/backend_test.py
+  
+  - agent: "testing"
+    message: |
+      ✅ ALL FRONTEND TESTS PASSED (6/6)
+      
+      Comprehensive frontend UI testing completed successfully:
+      
+      ✅ Login Redirect Test:
+         - Root URL (/) redirects to /login when not logged in
+         - After admin login, URL is /overview (NOT /)
+         - After member login, URL is /overview
+      
+      ✅ Admin Navbar Test:
+         - All 9 admin nav items present: Overview, Household, Finance, Health, Travel, Career, Goals & FIRE, Documents, Family
+         - Family Switcher visible and shows "Whole family"
+      
+      ✅ Member Navbar Test:
+         - Family nav item NOT visible (correct)
+         - Household nav item NOT visible (correct)
+         - Family Switcher NOT visible (correct)
+         - "Member view" badge displayed
+         - All 7 member nav items present: Overview, Finance, Health, Travel, Career, Goals & FIRE, Documents
+      
+      ✅ Overview Page: Loads without errors
+      ✅ Finance Page: Loads without errors
+      
+      ✅ Frontend Service Fix:
+         - Fixed webpack-dev-server v5 incompatibility by removing resolution from package.json
+         - Frontend now starts successfully
+      
+      Minor non-blocking issues:
+         - WebSocket connection warnings (expected in test environment)
+         - Chart dimension warnings (cosmetic, charts render correctly)
+      
+      All RBAC features working correctly. Screenshots captured for all test scenarios.
