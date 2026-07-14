@@ -5,8 +5,6 @@ import os
 import io
 import uuid
 import json
-import hashlib
-import secrets
 import logging
 import csv as csv_module
 from pathlib import Path
@@ -28,7 +26,7 @@ load_dotenv(ROOT_DIR / ".env")
 from auth import hash_password, verify_password, create_token, decode_token
 from services.storage_service import upload_file, get_file_content
 from services.crypto_service import encrypt_doc, decrypt_doc, decrypt_list, encrypt, decrypt
-from ai_parser import parse_universal, parse_image_file, parse_pdf_file
+from ai_parser import parse_universal, parse_image_file
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -80,13 +78,6 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str
     name: str
-    invite_code: Optional[str] = None
-
-
-class InviteIn(BaseModel):
-    member_id: Optional[str] = None   # link invitee to an existing member profile
-    role: Optional[str] = "member"    # "member" or "admin"
-    note: Optional[str] = None
 
 
 class LoginIn(BaseModel):
@@ -179,27 +170,6 @@ class PrescriptionIn(BaseModel):
 class InboxIn(BaseModel):
     text: str
     member_id: Optional[str] = None
-    dry_run: Optional[bool] = False
-
-
-class CorrectionIn(BaseModel):
-    text: str
-
-
-class PlanItemIn(BaseModel):
-    title: str
-    detail: Optional[str] = None
-    amount: Optional[float] = None
-    due_date: Optional[str] = None
-
-
-class PlanIn(BaseModel):
-    member_id: Optional[str] = None
-    name: str
-    plan_type: str = "other"
-    target_date: Optional[str] = None
-    notes: Optional[str] = None
-    items: List[dict] = []
 
 
 class SupplementIn(BaseModel):
@@ -355,125 +325,27 @@ async def seed_family_data() -> None:
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @api.post("/auth/register")
 async def register(body: RegisterIn):
-    """Invite-gated registration.
-
-    Bootstrap: if NO user exists yet, the first registration creates the family
-    admin with no invite needed. Every later registration requires a valid,
-    unused, unexpired invite code and joins the inviter's family. This means a
-    leaked URL alone is not enough to create an account.
-    """
-    _rate_check(f"register:{body.email.lower()}", max_calls=5, window_sec=300)
     if await db.users.find_one({"email": body.email.lower()}):
         raise HTTPException(status_code=400, detail="Email already registered")
-
-    any_user = await db.users.find_one({}, {"_id": 1})
-
-    # ── Bootstrap: first-ever account becomes the family admin ──
-    if not any_user:
-        uid = new_id()
-        mid = new_id()
-        await db.users.insert_one({
-            "id": uid, "email": body.email.lower(), "name": body.name,
-            "password_hash": hash_password(body.password),
-            "role": "admin", "linked_member_id": mid, "family_user_id": uid,
-            "created_at": now_iso(),
-        })
-        await db.members.insert_one({
-            "id": mid, "user_id": uid, "name": body.name,
-            "relation": "self", "color": "#184A31", "avatar_url": None,
-            "role": "admin", "created_at": now_iso(),
-        })
-        token = create_token(uid)
-        return {
-            "access_token": token,
-            "user": {"id": uid, "email": body.email.lower(), "name": body.name,
-                     "role": "admin", "linked_member_id": mid, "family_user_id": uid},
-        }
-
-    # ── Everyone else needs an invite ──
-    code = (body.invite_code or "").strip().upper()
-    if not code:
-        raise HTTPException(status_code=403, detail="Registration requires an invite code. Ask your family admin for one.")
-    invite = await db.invites.find_one({"code": code})
-    if not invite or invite.get("used_at"):
-        raise HTTPException(status_code=403, detail="Invalid or already-used invite code")
-    if invite.get("expires_at") and invite["expires_at"] < now_iso():
-        raise HTTPException(status_code=403, detail="This invite code has expired")
-
-    fuid = invite["user_id"]
-    role = invite.get("role") or "member"
-
-    mid = invite.get("member_id")
-    if mid:
-        m = await db.members.find_one({"id": mid, "user_id": fuid})
-        if not m:
-            mid = None
-    if not mid:
-        mid = new_id()
-        await db.members.insert_one({
-            "id": mid, "user_id": fuid, "name": body.name,
-            "relation": "member", "color": "#4A7B61", "avatar_url": None,
-            "role": role, "created_at": now_iso(),
-        })
-
     uid = new_id()
+    mid = new_id()
     await db.users.insert_one({
         "id": uid, "email": body.email.lower(), "name": body.name,
         "password_hash": hash_password(body.password),
-        "role": role, "linked_member_id": mid, "family_user_id": fuid,
+        "role": "admin", "linked_member_id": mid, "family_user_id": uid,
         "created_at": now_iso(),
     })
-    await db.invites.update_one({"id": invite["id"]}, {"$set": {
-        "used_at": now_iso(), "used_by_email": body.email.lower(), "used_by_user_id": uid,
-    }})
+    await db.members.insert_one({
+        "id": mid, "user_id": uid, "name": body.name,
+        "relation": "self", "color": "#184A31", "avatar_url": None,
+        "role": "admin", "created_at": now_iso(),
+    })
     token = create_token(uid)
     return {
         "access_token": token,
         "user": {"id": uid, "email": body.email.lower(), "name": body.name,
-                 "role": role, "linked_member_id": mid, "family_user_id": fuid},
+                 "role": "admin", "linked_member_id": mid, "family_user_id": uid},
     }
-
-
-# ── Invites (admin) ───────────────────────────────────────────────────────────
-@api.post("/invites")
-async def create_invite(body: InviteIn, current_user: dict = Depends(get_current_user)):
-    require_admin(current_user)
-    fuid = get_family_user_id(current_user)
-    if body.member_id:
-        m = await db.members.find_one({"id": body.member_id, "user_id": fuid})
-        if not m:
-            raise HTTPException(status_code=404, detail="Member not found")
-    code = secrets.token_hex(4).upper()  # 8-char code, e.g. 9F2C4A1B
-    from datetime import timedelta
-    doc = {
-        "id": new_id(), "user_id": fuid, "code": code,
-        "member_id": body.member_id, "role": body.role or "member",
-        "note": body.note, "created_by": current_user["id"],
-        "created_at": now_iso(),
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=14)).isoformat(),
-        "used_at": None,
-    }
-    await db.invites.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-
-@api.get("/invites")
-async def list_invites(current_user: dict = Depends(get_current_user)):
-    require_admin(current_user)
-    rows = await db.invites.find({"user_id": get_family_user_id(current_user)}, {"_id": 0}) \
-                           .sort("created_at", -1).to_list(100)
-    now = now_iso()
-    for r in rows:
-        r["status"] = "used" if r.get("used_at") else ("expired" if (r.get("expires_at") or "9999") < now else "active")
-    return rows
-
-
-@api.delete("/invites/{iid}")
-async def delete_invite(iid: str, current_user: dict = Depends(get_current_user)):
-    require_admin(current_user)
-    await db.invites.delete_one({"id": iid, "user_id": get_family_user_id(current_user)})
-    return {"ok": True}
 
 
 @api.post("/auth/login")
@@ -591,240 +463,72 @@ def _extract_pdf_text(data: bytes) -> str:
     return "\n".join(parts)
 
 
-def _map_member_name(name, mmap: dict) -> Optional[str]:
-    """Match a parsed member name against the family map (full name first, then first name)."""
-    if not name:
-        return None
-    nm = str(name).strip().lower()
-    if not nm:
-        return None
-    if nm in mmap:
-        return mmap[nm]
-    return mmap.get(nm.split()[0])
-
-
-async def _family_member_map(family_uid: str) -> dict:
-    """name(lower) -> member_id. First names added second so they never shadow full names."""
-    members = await db.members.find({"user_id": family_uid}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
-    mmap: dict = {}
-    for m in members:
-        full = (m.get("name") or "").strip().lower()
-        if full:
-            mmap[full] = m["id"]
-    for m in members:
-        full = (m.get("name") or "").strip().lower()
-        if full:
-            mmap.setdefault(full.split()[0], m["id"])
-    return mmap
-
-
-def _num(v) -> Optional[float]:
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
 async def _apply_parsed(user: dict, parsed: dict, default_mid: Optional[str], doc_id: Optional[str] = None) -> dict:
-    """Persist AI-parsed records to the correct collections.
+    """Persist AI-parsed records to the correct collections."""
+    if user.get("role") == "member" and not default_mid:
+        default_mid = user.get("linked_member_id")
 
-    Member routing per record: the record's own "member" name → explicit upload
-    selection → document-level member_hint → member-role linked id → None
-    (unassigned — never silently the first member in the DB).
-    Dedup: records that already exist are skipped, not duplicated.
-    """
     family_uid = get_family_user_id(user)
-    mmap = await _family_member_map(family_uid)
-
-    doc_default = None
-    if default_mid:
-        m = await db.members.find_one({"id": default_mid, "user_id": family_uid})
-        if m:
-            doc_default = m["id"]
-    if not doc_default:
-        doc_default = _map_member_name(parsed.get("member_hint"), mmap)
-    if not doc_default and user.get("role") == "member" and user.get("linked_member_id"):
-        doc_default = user["linked_member_id"]
+    member_id = await _resolve_member(user, parsed.get("member_hint"), default_mid)
 
     counts = {k: 0 for k in ("transactions", "investments", "loans", "lab_results",
                               "prescriptions", "vitals", "trips", "career_events",
-                              "goals", "supplements", "vaccinations", "insurance_policies",
-                              "assets", "plans", "generic_entries",
-                              "skipped_duplicates", "unassigned")}
+                              "goals", "supplements", "generic_entries")}
 
-    def _mid(rec: dict) -> Optional[str]:
-        mid = _map_member_name(rec.get("member"), mmap) or doc_default
-        if mid is None:
-            counts["unassigned"] += 1
-        return mid
-
-    def _base(rec: dict, extra: dict) -> dict:
-        b = {"id": new_id(), "user_id": family_uid, "member_id": _mid(rec),
+    def _base(extra: dict) -> dict:
+        b = {"id": new_id(), "user_id": family_uid, "member_id": member_id,
              "created_at": now_iso(), **extra}
         if doc_id:
             b["origin_document_id"] = doc_id
         return b
 
     for t in parsed.get("transactions", []) or []:
-        doc = _base(t, {
-            "date": t.get("date") or today_str(), "amount": float(t.get("amount", 0) or 0),
+        await db.transactions.insert_one(_base({
+            "date": t.get("date") or today_str(), "amount": float(t.get("amount", 0)),
             "type": t.get("type", "expense"), "category": t.get("category", "other"),
             "merchant": t.get("merchant"), "note": t.get("note"),
-        })
-        dup = await db.transactions.find_one({
-            "user_id": family_uid, "member_id": doc["member_id"], "date": doc["date"],
-            "amount": doc["amount"], "type": doc["type"], "category": doc["category"],
-        })
-        if dup:
-            counts["skipped_duplicates"] += 1
-            continue
-        await db.transactions.insert_one(encrypt_doc("transactions", doc))
+        }))
         counts["transactions"] += 1
 
-    inv_rows: list = []
-    if parsed.get("investments"):
-        inv_rows = await db.investments.find({"user_id": family_uid}, {"_id": 0}).to_list(500)
-        for r in inv_rows:
-            r["_plain_name"] = (decrypt(r.get("name")) or "").strip().lower() if r.get("name") else ""
     for inv in parsed.get("investments", []) or []:
-        mid = _mid(inv)
-        name = (inv.get("name") or "Unknown").strip()
-        match = next((r for r in inv_rows
-                      if r["_plain_name"] == name.lower() and r.get("member_id") == mid), None)
-        if match:
-            upd = {k: inv.get(k) for k in ("units", "current_value", "invested_value") if inv.get(k) is not None}
-            if upd:
-                await db.investments.update_one({"id": match["id"]}, {"$set": upd})
-        else:
-            doc = {"id": new_id(), "user_id": family_uid, "member_id": mid, "created_at": now_iso(),
-                   "name": name, "kind": inv.get("kind", "other"), "units": inv.get("units"),
-                   "current_value": inv.get("current_value"), "invested_value": inv.get("invested_value")}
-            if doc_id:
-                doc["origin_document_id"] = doc_id
-            await db.investments.insert_one(encrypt_doc("investments", doc))
+        await db.investments.insert_one(_base({
+            "name": inv.get("name", "Unknown"), "kind": inv.get("kind", "other"),
+            "units": inv.get("units"), "current_value": inv.get("current_value"),
+            "invested_value": inv.get("invested_value"),
+        }))
         counts["investments"] += 1
 
     for loan in parsed.get("loans", []) or []:
-        mid = _mid(loan)
-        name = loan.get("name", "Loan")
-        upd = {"outstanding": float(loan.get("outstanding", 0) or 0),
-               "emi": loan.get("emi"), "rate": loan.get("rate")}
-        existing = await db.loans.find_one({"user_id": family_uid, "member_id": mid, "name": name})
-        if existing:
-            await db.loans.update_one({"id": existing["id"]}, {"$set": upd})
-        else:
-            await db.loans.insert_one({"id": new_id(), "user_id": family_uid, "member_id": mid,
-                                       "created_at": now_iso(), "name": name, **upd,
-                                       **({"origin_document_id": doc_id} if doc_id else {})})
+        await db.loans.insert_one(_base({
+            "name": loan.get("name", "Loan"), "outstanding": float(loan.get("outstanding", 0)),
+            "emi": loan.get("emi"), "rate": loan.get("rate"),
+        }))
         counts["loans"] += 1
 
     for lab in parsed.get("lab_results", []) or []:
-        doc = _base(lab, {
+        await db.lab_results.insert_one(_base({
             "date": lab.get("date") or today_str(), "test": lab.get("test", "Unknown"),
-            "value": _num(lab.get("value")), "unit": lab.get("unit"),
+            "value": float(lab.get("value", 0)), "unit": lab.get("unit"),
             "reference_range": lab.get("reference_range"),
-        })
-        dup = await db.lab_results.find_one({
-            "user_id": family_uid, "member_id": doc["member_id"], "date": doc["date"],
-            "test": doc["test"], "value": doc["value"],
-        })
-        if dup:
-            counts["skipped_duplicates"] += 1
-            continue
-        await db.lab_results.insert_one(encrypt_doc("lab_results", doc))
+        }))
         counts["lab_results"] += 1
 
     for pres in parsed.get("prescriptions", []) or []:
-        doc = _base(pres, {
+        await db.prescriptions.insert_one(_base({
             "date": pres.get("date") or today_str(), "doctor": pres.get("doctor"),
             "medications": pres.get("medications", []), "notes": pres.get("notes"),
-        })
-        await db.prescriptions.insert_one(encrypt_doc("prescriptions", doc))
+        }))
         counts["prescriptions"] += 1
 
     for v in parsed.get("vitals", []) or []:
-        doc = _base(v, {
+        await db.vitals.insert_one(_base({
             "date": v.get("date") or today_str(), "kind": v.get("kind", "other"),
             "value": str(v.get("value", "")), "unit": v.get("unit"),
-        })
-        dup = await db.vitals.find_one({
-            "user_id": family_uid, "member_id": doc["member_id"], "date": doc["date"],
-            "kind": doc["kind"], "value": doc["value"],
-        })
-        if dup:
-            counts["skipped_duplicates"] += 1
-            continue
-        await db.vitals.insert_one(encrypt_doc("vitals", doc))
+        }))
         counts["vitals"] += 1
 
-    for vac in parsed.get("vaccinations", []) or []:
-        mid = _mid(vac)
-        dose_digits = "".join(ch for ch in str(vac.get("dose") or "") if ch.isdigit())
-        vac_doc = {"id": new_id(), "user_id": family_uid, "member_id": mid, "created_at": now_iso(),
-                   "vaccine_name": vac.get("vaccine", "Unknown"),
-                   "date_administered": vac.get("date") or today_str(),
-                   "dose_number": int(dose_digits) if dose_digits else 1,
-                   "next_due_date": vac.get("next_due"),
-                   "administered_by": None, "notes": vac.get("notes"),
-                   **({"origin_document_id": doc_id} if doc_id else {})}
-        dup = await db.vaccinations.find_one({
-            "user_id": family_uid, "member_id": mid,
-            "vaccine_name": vac_doc["vaccine_name"], "date_administered": vac_doc["date_administered"],
-        })
-        if dup:
-            counts["skipped_duplicates"] += 1
-            continue
-        await db.vaccinations.insert_one(vac_doc)
-        counts["vaccinations"] += 1
-
-    for pol in parsed.get("insurance_policies", []) or []:
-        mid = _mid(pol)
-        insurer = pol.get("provider") or pol.get("name") or "Unknown"
-        ptype = pol.get("policy_type", "other")
-        premium = _num(pol.get("premium"))
-        freq = (pol.get("premium_frequency") or "yearly").lower()
-        annual_premium = premium * {"monthly": 12, "quarterly": 4, "yearly": 1}.get(freq, 1) if premium else None
-        note_parts = [pol.get("name"), pol.get("notes")]
-        if premium and freq != "yearly":
-            note_parts.append(f"premium {premium:,.0f} {freq}")
-        upd = {"sum_assured": pol.get("sum_assured"), "annual_premium": annual_premium,
-               "policy_end": pol.get("renewal_date"),
-               "notes": " | ".join(x for x in note_parts if x) or None}
-        existing = await db.insurance_policies.find_one({
-            "user_id": family_uid, "member_id": mid, "insurer": insurer, "policy_type": ptype})
-        if existing:
-            await db.insurance_policies.update_one(
-                {"id": existing["id"]}, {"$set": {k: v for k, v in upd.items() if v is not None}})
-        else:
-            await db.insurance_policies.insert_one({
-                "id": new_id(), "user_id": family_uid, "member_id": mid, "created_at": now_iso(),
-                "insurer": insurer, "policy_type": ptype, "policy_number": None,
-                "premium_due_date": None, "policy_start": None, "nominee": None,
-                "document_drive_id": None, **upd,
-                **({"origin_document_id": doc_id} if doc_id else {})})
-        counts["insurance_policies"] += 1
-
-    for a in parsed.get("assets", []) or []:
-        mid = _mid(a)
-        name = a.get("name", "Asset")
-        ptype = {"property": "residential", "vehicle": "vehicle"}.get(a.get("kind", "other"), "other")
-        upd = {"property_type": ptype, "purchase_date": a.get("purchase_date"),
-               "purchase_price": a.get("purchase_value"),
-               "current_estimated_value": a.get("current_value"), "notes": a.get("notes")}
-        existing = await db.properties.find_one({"user_id": family_uid, "name": name})
-        if existing:
-            await db.properties.update_one(
-                {"id": existing["id"]}, {"$set": {k: v for k, v in upd.items() if v is not None}})
-        else:
-            await db.properties.insert_one({
-                "id": new_id(), "user_id": family_uid, "member_id": mid, "created_at": now_iso(),
-                "name": name, "address": None, "rental_income_monthly": None,
-                "loan_linked_id": None, **upd,
-                **({"origin_document_id": doc_id} if doc_id else {})})
-        counts["assets"] += 1
-
     for tr in parsed.get("trips", []) or []:
-        await db.trips.insert_one(_base(tr, {
+        await db.trips.insert_one(_base({
             "name": tr.get("name", "Trip"), "destination": tr.get("destination", ""),
             "start_date": tr.get("start_date"), "end_date": tr.get("end_date"),
             "budget": tr.get("budget"), "notes": tr.get("notes"),
@@ -832,19 +536,11 @@ async def _apply_parsed(user: dict, parsed: dict, default_mid: Optional[str], do
         counts["trips"] += 1
 
     for ev in parsed.get("career_events", []) or []:
-        doc = _base(ev, {
+        await db.career_events.insert_one(_base({
             "date": ev.get("date") or today_str(), "kind": ev.get("kind", "achievement"),
             "title": ev.get("title", ""), "company": ev.get("company"),
             "ctc": ev.get("ctc"), "notes": ev.get("notes"),
-        })
-        dup = await db.career_events.find_one({
-            "user_id": family_uid, "member_id": doc["member_id"], "date": doc["date"],
-            "kind": doc["kind"], "title": doc["title"],
-        })
-        if dup:
-            counts["skipped_duplicates"] += 1
-            continue
-        await db.career_events.insert_one(doc)
+        }))
         counts["career_events"] += 1
 
     for goal in parsed.get("goals", []) or []:
@@ -859,12 +555,11 @@ async def _apply_parsed(user: dict, parsed: dict, default_mid: Optional[str], do
         if existing:
             await db.goals.update_one({"id": existing["id"]}, {"$set": upd})
         else:
-            await db.goals.insert_one(_base(goal, {"name": goal.get("name", "Goal"), **upd}))
+            await db.goals.insert_one(_base({"name": goal.get("name", "Goal"), **upd}))
         counts["goals"] += 1
 
     for sup in parsed.get("supplements", []) or []:
-        mid = _mid(sup)
-        existing = await db.supplements.find_one({"user_id": family_uid, "member_id": mid, "name": sup.get("name")})
+        existing = await db.supplements.find_one({"user_id": family_uid, "member_id": member_id, "name": sup.get("name")})
         upd = {
             "dose": sup.get("dose", ""), "frequency": sup.get("frequency", ""),
             "start_date": sup.get("start_date") or today_str(),
@@ -874,25 +569,11 @@ async def _apply_parsed(user: dict, parsed: dict, default_mid: Optional[str], do
         if existing:
             await db.supplements.update_one({"id": existing["id"]}, {"$set": upd})
         else:
-            await db.supplements.insert_one({"id": new_id(), "user_id": family_uid, "member_id": mid,
-                                             "created_at": now_iso(),
-                                             "name": sup.get("name", "Supplement"), **upd})
+            await db.supplements.insert_one(_base({"name": sup.get("name", "Supplement"), **upd}))
         counts["supplements"] += 1
 
-    for pl in parsed.get("plans", []) or []:
-        name = pl.get("name", "Plan")
-        upd = {"plan_type": pl.get("plan_type", "other"), "target_date": pl.get("target_date"),
-               "notes": pl.get("notes"), "items": pl.get("items", []),
-               "updated_at": now_iso(), "origin_document_id": doc_id}
-        existing = await db.plans.find_one({"user_id": family_uid, "name": name})
-        if existing:
-            await db.plans.update_one({"id": existing["id"]}, {"$set": upd})
-        else:
-            await db.plans.insert_one(_base(pl, {"name": name, **upd}))
-        counts["plans"] += 1
-
     for g in parsed.get("generic_entries", []) or []:
-        await db.generic_entries.insert_one(_base(g, {
+        await db.generic_entries.insert_one(_base({
             "category": g.get("category", "note"),
             "title": g.get("title", "Note"),
             "data": g.get("data", {}),
@@ -902,74 +583,19 @@ async def _apply_parsed(user: dict, parsed: dict, default_mid: Optional[str], do
     return counts
 
 
-async def _recent_corrections(family_uid: str) -> list:
-    rows = await db.inbox_corrections.find({"user_id": family_uid}, {"_id": 0, "text": 1}) \
-                                     .sort("created_at", -1).to_list(10)
-    return [r["text"] for r in rows]
-
-
-async def _plan_updates_for(family_uid: str, parsed: dict) -> list:
-    """Diff proposed goal targets vs existing goals (used by dry-run responses)."""
-    plan_updates = []
-    for goal in parsed.get("goals", []) or []:
-        gname = goal.get("name")
-        if not gname:
-            continue
-        existing = await db.goals.find_one({"user_id": family_uid, "name": gname}, {"_id": 0})
-        plan_updates.append({
-            "goal_name": gname,
-            "goal_id": existing["id"] if existing else None,
-            "current_target": float((existing or {}).get("target_amount") or 0),
-            "proposed_target": float(goal.get("target_amount") or 0),
-            "action": "update" if existing else "create",
-        })
-    return plan_updates
-
-
 @api.post("/inbox/text")
 async def inbox_text(body: InboxIn, current_user: dict = Depends(get_current_user)):
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
     family_uid = get_family_user_id(current_user)
     members = await db.members.find({"user_id": family_uid}, {"_id": 0, "name": 1}).to_list(50)
-    corrections = await _recent_corrections(family_uid)
-    parsed = await parse_universal(body.text, today_str(), [m["name"] for m in members], corrections)
-
-    # Dry run: return proposed records for review — nothing saved yet.
-    if body.dry_run:
-        plan_updates = await _plan_updates_for(family_uid, parsed)
-        return {"parsed": parsed, "proposed": True, "plan_updates": plan_updates}
-
+    parsed = await parse_universal(body.text, today_str(), [m["name"] for m in members])
     counts = await _apply_parsed(current_user, parsed, body.member_id)
     await db.inbox_log.insert_one({
         "id": new_id(), "user_id": family_uid, "kind": "text",
         "input_preview": body.text[:500], "parsed": parsed, "counts": counts, "created_at": now_iso(),
     })
     return {"parsed": parsed, "counts": counts}
-
-
-@api.post("/inbox/corrections")
-async def add_correction(body: CorrectionIn, current_user: dict = Depends(get_current_user)):
-    """Save a parsing correction. The last 10 are injected into every future parse."""
-    if not body.text or not body.text.strip():
-        raise HTTPException(status_code=400, detail="Text is required")
-    doc = {"id": new_id(), "user_id": get_family_user_id(current_user),
-           "text": body.text.strip()[:500], "created_at": now_iso()}
-    await db.inbox_corrections.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-
-@api.get("/inbox/corrections")
-async def list_corrections(current_user: dict = Depends(get_current_user)):
-    return await db.inbox_corrections.find({"user_id": get_family_user_id(current_user)}, {"_id": 0}) \
-                                     .sort("created_at", -1).to_list(50)
-
-
-@api.delete("/inbox/corrections/{cid}")
-async def delete_correction(cid: str, current_user: dict = Depends(get_current_user)):
-    await db.inbox_corrections.delete_one({"id": cid, "user_id": get_family_user_id(current_user)})
-    return {"ok": True}
 
 
 @api.post("/inbox/file")
@@ -990,17 +616,6 @@ async def inbox_file(
     content_type = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     family_uid = get_family_user_id(current_user)
 
-    # Duplicate-upload guard: same bytes already in the library → don't re-store or re-parse.
-    content_hash = hashlib.sha256(data).hexdigest()
-    existing_doc = await db.documents.find_one(
-        {"user_id": family_uid, "content_hash": content_hash, "is_deleted": False}, {"_id": 0})
-    if existing_doc:
-        return {"duplicate": True,
-                "existing_document_id": existing_doc["id"],
-                "existing_filename": existing_doc.get("original_filename"),
-                "uploaded_at": existing_doc.get("created_at"),
-                "parsed_summary": existing_doc.get("parsed_summary")}
-
     try:
         storage_path = await upload_file(data, filename, content_type, family_uid)
     except Exception as e:
@@ -1011,32 +626,27 @@ async def inbox_file(
     await db.documents.insert_one({
         "id": doc_id, "user_id": family_uid, "member_id": member_id,
         "storage_path": storage_path, "original_filename": filename,
-        "content_type": content_type, "size": len(data), "content_hash": content_hash,
+        "content_type": content_type, "size": len(data),
         "is_deleted": False, "created_at": now_iso(),
     })
 
     members = await db.members.find({"user_id": family_uid}, {"_id": 0, "name": 1}).to_list(50)
     member_names = [m["name"] for m in members]
-    corrections = await _recent_corrections(family_uid)
     parsed: dict = {"summary": f"Uploaded {filename}", "module": "generic", "confidence": 0.0}
     is_image = content_type.startswith("image/") or ext in ("jpg", "jpeg", "png", "webp", "gif", "heic", "heif")
     counts: dict = {}
 
     try:
         if ext == "pdf":
-            # Native PDF parse first (keeps table/column layout); text extraction fallback.
-            try:
-                parsed = await parse_pdf_file(data, today_str(), member_names, corrections)
-            except Exception as e:
-                logger.warning(f"Native PDF parse failed for {filename}, falling back to text: {e}")
-                text = _extract_pdf_text(data)
-                if text.strip():
-                    parsed = await parse_universal(text, today_str(), member_names, corrections)
+            text = _extract_pdf_text(data)
+            if text.strip():
+                parsed = await parse_universal(text, today_str(), member_names)
         elif ext in ("txt", "csv", "json", "md"):
             text = data.decode("utf-8", errors="ignore")
-            parsed = await parse_universal(text, today_str(), member_names, corrections)
+            parsed = await parse_universal(text, today_str(), member_names)
         elif is_image:
-            parsed = await parse_image_file(data, content_type, today_str(), member_names, corrections)
+            parsed = await parse_image_file(data, content_type, today_str(), member_names)
+            parsed["_source"] = "vision"
     except Exception as e:
         logger.error(f"Parse error for {filename}: {e}")
 
@@ -1045,11 +655,21 @@ async def inbox_file(
     if is_dry_run:
         await db.documents.update_one({"id": doc_id}, {"$set": {
             "parsed_summary": parsed.get("summary"),
-            "statement_period": parsed.get("statement_period"),
-            "modules": parsed.get("modules"),
-            "confidence": parsed.get("confidence"),
         }})
-        plan_updates = await _plan_updates_for(family_uid, parsed)
+        # Compute plan_updates: diff proposed goal targets vs existing goals
+        plan_updates = []
+        for goal in parsed.get("goals", []) or []:
+            gname = goal.get("name")
+            if not gname:
+                continue
+            existing = await db.goals.find_one({"user_id": family_uid, "name": gname}, {"_id": 0})
+            plan_updates.append({
+                "goal_name": gname,
+                "goal_id": existing["id"] if existing else None,
+                "current_target": float((existing or {}).get("target_amount") or 0),
+                "proposed_target": float(goal.get("target_amount") or 0),
+                "action": "update" if existing else "create",
+            })
         return {"document_id": doc_id, "parsed": parsed, "proposed": True,
                 "plan_updates": plan_updates if plan_updates else []}
 
@@ -1058,9 +678,6 @@ async def inbox_file(
 
     await db.documents.update_one({"id": doc_id}, {"$set": {
         "parsed_summary": parsed.get("summary"), "counts": counts,
-        "statement_period": parsed.get("statement_period"),
-        "modules": parsed.get("modules"),
-        "confidence": parsed.get("confidence"),
     }})
     await db.inbox_log.insert_one({
         "id": new_id(), "user_id": family_uid, "kind": "file",
@@ -1083,8 +700,7 @@ async def inbox_apply(body: ApplyInboxIn, current_user: dict = Depends(get_curre
     """Apply user-confirmed records from a dry-run parse. Writes to update_log."""
     ALL_RECORD_TYPES = [
         "transactions", "investments", "loans", "lab_results", "prescriptions",
-        "vitals", "trips", "career_events", "goals", "supplements",
-        "vaccinations", "insurance_policies", "assets", "plans", "generic_entries",
+        "vitals", "trips", "career_events", "goals", "supplements", "generic_entries",
     ]
     parsed = {**body.parsed}
     if body.selected_types is not None:
@@ -1132,143 +748,6 @@ async def inbox_log(current_user: dict = Depends(get_current_user), limit: int =
     return items
 
 
-# ── Plans (uploaded financial / supplement / fitness plans) ────────────────────
-@api.get("/plans")
-async def list_plans(member_id: Optional[str] = None, plan_type: Optional[str] = None,
-                     current_user: dict = Depends(get_current_user)):
-    q = resolve_member_filter(current_user, member_id)
-    if plan_type:
-        q["plan_type"] = plan_type
-    return await db.plans.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
-
-
-@api.post("/plans")
-async def create_plan(body: PlanIn, current_user: dict = Depends(get_current_user)):
-    doc = {"id": new_id(), "user_id": get_family_user_id(current_user), **body.model_dump(),
-           "updated_at": now_iso(), "created_at": now_iso()}
-    await db.plans.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-
-@api.patch("/plans/{pid}")
-async def update_plan(pid: str, body: dict, current_user: dict = Depends(get_current_user)):
-    body["updated_at"] = now_iso()
-    await db.plans.update_one({"id": pid, "user_id": get_family_user_id(current_user)}, {"$set": body})
-    return await db.plans.find_one({"id": pid}, {"_id": 0})
-
-
-@api.delete("/plans/{pid}")
-async def delete_plan(pid: str, current_user: dict = Depends(get_current_user)):
-    await db.plans.delete_one({"id": pid, "user_id": get_family_user_id(current_user)})
-    return {"ok": True}
-
-
-@api.get("/plans/progress")
-async def plans_progress(member_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    """Plans with items auto-linked to live goals/supplements by name for progress tracking."""
-    q = resolve_member_filter(current_user, member_id)
-    fuid = get_family_user_id(current_user)
-    plans = await db.plans.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
-
-    goals = await db.goals.find({"user_id": fuid}, {"_id": 0}).to_list(300)
-    goal_by_name = {(g.get("name") or "").strip().lower(): g for g in goals}
-    supps = await db.supplements.find({"user_id": fuid}, {"_id": 0}).to_list(300)
-    supp_by_name = {(s.get("name") or "").strip().lower(): s for s in supps}
-    today = today_str()
-
-    for p in plans:
-        linked_target = linked_current = 0.0
-        items_out = []
-        for it in p.get("items", []) or []:
-            item = dict(it)
-            key = (it.get("title") or "").strip().lower()
-            g = goal_by_name.get(key)
-            s = supp_by_name.get(key) if not g else None
-            if g:
-                target = float(g.get("target_amount") or 0)
-                current = float(g.get("current_amount") or 0)
-                item["linked"] = {"type": "goal", "goal_id": g["id"], "current": current,
-                                  "target": target,
-                                  "pct": round(current / target * 100, 1) if target > 0 else None}
-                linked_target += target
-                linked_current += current
-            elif s:
-                active = not s.get("end_date") or s["end_date"] >= today
-                item["linked"] = {"type": "supplement", "supplement_id": s["id"], "active": active,
-                                  "dose": s.get("dose"), "frequency": s.get("frequency")}
-            else:
-                item["linked"] = None
-            items_out.append(item)
-        p["items"] = items_out
-        p["progress"] = {"linked_target": linked_target, "linked_current": linked_current,
-                         "pct": round(linked_current / linked_target * 100, 1) if linked_target > 0 else None}
-    return plans
-
-
-# ── Unassigned records review bucket ──────────────────────────────────────────
-UNASSIGNED_KINDS: dict = {
-    "transactions":    ("transactions", "transactions"),
-    "investments":     ("investments", "investments"),
-    "loans":           ("loans", None),
-    "lab_results":     ("lab_results", "lab_results"),
-    "prescriptions":   ("prescriptions", "prescriptions"),
-    "vitals":          ("vitals", "vitals"),
-    "vaccinations":    ("vaccinations", None),
-    "career_events":   ("career_events", None),
-    "supplements":     ("supplements", None),
-    "trips":           ("trips", None),
-    "generic_entries": ("generic_entries", None),
-}
-
-
-@api.get("/records/unassigned")
-async def unassigned_records(current_user: dict = Depends(get_current_user)):
-    """All records whose member could not be resolved at parse time (member_id null)."""
-    require_admin(current_user)
-    fuid = get_family_user_id(current_user)
-    out: dict = {}
-    counts: dict = {}
-    for kind, (coll_name, enc) in UNASSIGNED_KINDS.items():
-        rows = await db[coll_name].find({"user_id": fuid, "member_id": None}, {"_id": 0}) \
-                                  .sort("created_at", -1).to_list(200)
-        if enc:
-            rows = decrypt_list(enc, rows)
-        if rows:
-            out[kind] = rows
-            counts[kind] = len(rows)
-    return {"counts": counts, "total": sum(counts.values()), "records": out}
-
-
-class AssignIn(BaseModel):
-    member_id: str
-
-
-@api.patch("/records/unassigned/{kind}/{rid}")
-async def assign_record(kind: str, rid: str, body: AssignIn, current_user: dict = Depends(get_current_user)):
-    require_admin(current_user)
-    if kind not in UNASSIGNED_KINDS:
-        raise HTTPException(status_code=404, detail="Unknown kind")
-    fuid = get_family_user_id(current_user)
-    m = await db.members.find_one({"id": body.member_id, "user_id": fuid})
-    if not m:
-        raise HTTPException(status_code=404, detail="Member not found")
-    coll_name = UNASSIGNED_KINDS[kind][0]
-    res = await db[coll_name].update_one({"id": rid, "user_id": fuid}, {"$set": {"member_id": body.member_id}})
-    if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return {"ok": True, "member_name": m.get("name")}
-
-
-@api.delete("/records/unassigned/{kind}/{rid}")
-async def delete_unassigned(kind: str, rid: str, current_user: dict = Depends(get_current_user)):
-    require_admin(current_user)
-    if kind not in UNASSIGNED_KINDS:
-        raise HTTPException(status_code=404, detail="Unknown kind")
-    await db[UNASSIGNED_KINDS[kind][0]].delete_one({"id": rid, "user_id": get_family_user_id(current_user)})
-    return {"ok": True}
-
-
 # ── Finance ────────────────────────────────────────────────────────────────────
 async def _finance_summary_q(q: dict) -> dict:
     today = datetime.now(timezone.utc)
@@ -1280,8 +759,6 @@ async def _finance_summary_q(q: dict) -> dict:
     invest_val  = sum((i.get("current_value") or 0) for i in investments)
     loans = await db.loans.find(q, {"_id": 0}).to_list(500)
     debt  = sum(ln.get("outstanding", 0) for ln in loans)
-    props = await db.properties.find(q, {"_id": 0}).to_list(200)
-    asset_val = sum((p.get("current_estimated_value") or 0) for p in props)
     cat_bd: dict = {}
     for t in txs:
         if t["type"] == "expense" and t["date"] >= month_start:
@@ -1289,8 +766,7 @@ async def _finance_summary_q(q: dict) -> dict:
     return {
         "income_month": income_m, "expense_month": expense_m,
         "savings_month": income_m - expense_m,
-        "net_worth": invest_val + asset_val - debt,
-        "invest_value": invest_val, "asset_value": asset_val, "debt": debt,
+        "net_worth": invest_val - debt, "invest_value": invest_val, "debt": debt,
         "category_breakdown": cat_bd,
     }
 
@@ -2104,7 +1580,8 @@ async def create_vaccination(body: VaccinationIn, current_user: dict = Depends(g
 @api.put("/health/vaccinations/{vid}")
 async def update_vaccination(vid: str, body: VaccinationIn, current_user: dict = Depends(get_current_user)):
     await db.vaccinations.update_one({"id": vid, "user_id": get_family_user_id(current_user)}, {"$set": body.model_dump()})
-    return await db.vaccinations.find_one({"id": vid}, {"_id": 0})
+    doc = await db.vaccinations.find_one({"id": vid}, {"_id": 0})
+    return doc
 
 @api.delete("/health/vaccinations/{vid}")
 async def delete_vaccination(vid: str, current_user: dict = Depends(get_current_user)):
@@ -2458,7 +1935,7 @@ async def global_search(q: str, current_user: dict = Depends(get_current_user)):
     for a in appts:
         doctor = decrypt(a.get("doctor_name", "")) if a.get("doctor_name") else a.get("doctor_name", "")
         if ql in str(doctor).lower() or ql in str(a.get("reason", "")).lower() or ql in str(a.get("speciality", "")).lower():
-            resresults.append({"type": "appointment", "label": doctor or "Appointment", "sub": f"{a.get('speciality', '')} · {a.get('appointment_date', '')}", "link": "/health"})
+            results.append({"type": "appointment", "label": doctor or "Appointment", "sub": f"{a.get('speciality', '')} · {a.get('appointment_date', '')}", "link": "/health"})
 
     # Investments
     invs = await db.investments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
@@ -2468,6 +1945,7 @@ async def global_search(q: str, current_user: dict = Depends(get_current_user)):
             results.append({"type": "investment", "label": name, "sub": f"{i.get('kind', '')} · ₹{i.get('current_value', '') or ''}", "link": "/finance"})
 
     return results[:12]
+
 
 
 # ── Extended Finance Summary ───────────────────────────────────────────────────
@@ -2510,8 +1988,4 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    client.close()
-n():
-    client.close()
-wn():
     client.close()
