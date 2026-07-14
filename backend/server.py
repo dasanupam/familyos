@@ -2458,7 +2458,7 @@ async def global_search(q: str, current_user: dict = Depends(get_current_user)):
     for a in appts:
         doctor = decrypt(a.get("doctor_name", "")) if a.get("doctor_name") else a.get("doctor_name", "")
         if ql in str(doctor).lower() or ql in str(a.get("reason", "")).lower() or ql in str(a.get("speciality", "")).lower():
-            results.append({"type": "appointment", "label": doctor or "Appointment", "sub": f"{a.get('speciality', '')} · {a.get('appointment_date', '')}", "link": "/health"})
+            resresults.append({"type": "appointment", "label": doctor or "Appointment", "sub": f"{a.get('speciality', '')} · {a.get('appointment_date', '')}", "link": "/health"})
 
     # Investments
     invs = await db.investments.find({"user_id": fuid}, {"_id": 0}).to_list(200)
@@ -2468,7 +2468,6 @@ async def global_search(q: str, current_user: dict = Depends(get_current_user)):
             results.append({"type": "investment", "label": name, "sub": f"{i.get('kind', '')} · ₹{i.get('current_value', '') or ''}", "link": "/finance"})
 
     return results[:12]
-
 
 
 # ── Extended Finance Summary ───────────────────────────────────────────────────
@@ -2506,10 +2505,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     logger.info("FamilyOS backend started")
+    pass  # no seed data
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    client.close()
+n():
     client.close()
 wn():
     client.close()
