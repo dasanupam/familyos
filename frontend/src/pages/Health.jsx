@@ -425,7 +425,7 @@ export default function Health() {
             { k: "next_due_date", label: "Next Due" },
             { k: "administered_by", label: "By" },
             { k: "member_id", label: "Member", render: memberName },
-          ]} onDelete={(r) => remove(r.id)} empty="No vaccination records." />
+          ]} onDelete={(r) => remove(r.id)} onEdit={startEdit} empty="No vaccination records." />
         )}
       </div>
 

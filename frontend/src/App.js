@@ -15,6 +15,8 @@ import Travel from "@/pages/Travel";
 import Career from "@/pages/Career";
 import FamilyOverview from "@/pages/FamilyOverview";
 import Property from "@/pages/Property";
+import Plans from "@/pages/Plans";
+import Unassigned from "@/pages/Unassigned";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -51,6 +53,8 @@ export default function App() {
             <Route path="career"    element={<Career />} />
             <Route path="household" element={<FamilyOverview />} />
             <Route path="property"  element={<Property />} />
+            <Route path="plans"     element={<Plans />} />
+            <Route path="review"    element={<Unassigned />} />
           </Route>
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>

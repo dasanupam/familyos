@@ -78,8 +78,9 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (name, email, password) => {
-    const { data } = await api.post("/auth/register", { name, email, password });
+  const register = async (name, email, password, inviteCode) => {
+    const { data } = await api.post("/auth/register",
+      { name, email, password, invite_code: inviteCode || null });
     localStorage.setItem("flos_token", data.access_token);
     localStorage.setItem("flos_user", JSON.stringify(data.user));
     setUser(data.user);

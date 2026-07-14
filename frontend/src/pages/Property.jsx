@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, formatINRFull } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Plus, Trash2, Edit3, Home, Car, Building2, Leaf, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Edit3, Home, Car, Building2, Leaf, ShieldCheck, Coins } from "lucide-react";
 import { Modal, Field, SelectMember } from "@/pages/Finance";
 import { toast } from "sonner";
 
@@ -60,7 +60,7 @@ export default function Property() {
     refresh();
   };
 
-  const typeIcon = (t) => ({ residential: Home, vehicle: Car, commercial: Building2, land: Leaf }[t] || Home);
+  const typeIcon = (t) => ({ residential: Home, vehicle: Car, commercial: Building2, land: Leaf, gold: Coins, silver: Coins, other: Coins }[t] || Home);
 
   return (
     <div className="space-y-6" data-testid="property-page">
@@ -70,7 +70,7 @@ export default function Property() {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="card-surface p-4"><div className="label-eyebrow">Total Property Value</div><div className="font-display text-2xl mt-1 text-[#367A50]">{formatINRFull(totalPropertyValue)}</div></div>
           <div className="card-surface p-4"><div className="label-eyebrow">Rental Income / mo</div><div className="font-display text-2xl mt-1">{formatINRFull(totalRentalIncome)}</div></div>
-          <div className="card-surface p-4"><div className="label-eyebrow">Total Assets</div><div className="font-display text-2xl mt-1">{props.length} properties</div></div>
+          <div className="card-surface p-4"><div className="label-eyebrow">Total Assets</div><div className="font-display text-2xl mt-1">{props.length} assets</div></div>
         </div>
       )}
 
@@ -174,7 +174,7 @@ export default function Property() {
             <SelectMember value={form.member_id || defaultMemberId} onChange={(v) => setForm({ ...form, member_id: v })} members={members} />
             {tab === "properties" && <>
               <Field label="Name" value={form.name || ""} onChange={(v) => setForm({ ...form, name: v })} required placeholder="My home, Car, Plot…" />
-              <Field label="Type" as="select" value={form.property_type || "residential"} onChange={(v) => setForm({ ...form, property_type: v })} options={[["residential","Residential"],["commercial","Commercial"],["land","Land"],["vehicle","Vehicle"]]} />
+              <Field label="Type" as="select" value={form.property_type || "residential"} onChange={(v) => setForm({ ...form, property_type: v })} options={[["residential","Residential"],["commercial","Commercial"],["land","Land"],["vehicle","Vehicle"],["gold","Gold"],["silver","Silver"],["other","Other Asset"]]} />
               <Field label="Address / description" value={form.address || ""} onChange={(v) => setForm({ ...form, address: v })} />
               <Field label="Purchase date" type="date" value={form.purchase_date || ""} onChange={(v) => setForm({ ...form, purchase_date: v })} />
               <Field label="Purchase price (₹)" type="number" value={form.purchase_price || ""} onChange={(v) => setForm({ ...form, purchase_price: v })} />

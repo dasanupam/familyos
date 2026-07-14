@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { useNavigate, Link } from "react-router-dom";
-import { Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { Loader2, Sparkles, Eye, EyeOff, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
   const { register } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [searchParams] = useSearchParams();
+  const [form, setForm] = useState({
+    name: "", email: "", password: "",
+    invite_code: (searchParams.get("code") || "").toUpperCase(),
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -15,7 +19,7 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      await register(form.name, form.email, form.password);
+      await register(form.name, form.email, form.password, form.invite_code);
       toast.success("Welcome aboard");
       nav("/overview");
     } catch (err) {
@@ -82,6 +86,23 @@ export default function Register() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+          </div>
+          <div>
+            <label className="label-eyebrow block mb-2">Invite code</label>
+            <div className="relative">
+              <input
+                data-testid="register-invite-input"
+                value={form.invite_code}
+                onChange={(e) => setForm({ ...form, invite_code: e.target.value.toUpperCase() })}
+                className="w-full border border-[#E5E2DC] bg-white px-4 py-3 pr-12 rounded-xl focus:outline-none focus:border-[#184A31] font-mono tracking-wider"
+                placeholder="e.g. 9F2C4A1B"
+              />
+              <KeyRound className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#5E6A62]" />
+            </div>
+            <p className="text-xs text-[#5E6A62] mt-1.5">
+              Registration is invite-only. Ask your family admin for a code.
+              (The very first account on a fresh setup doesn't need one.)
+            </p>
           </div>
           <button
             data-testid="register-submit-button"

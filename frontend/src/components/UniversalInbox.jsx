@@ -7,31 +7,40 @@ import { toast } from "sonner";
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const RECORD_TYPES = [
-  { key: "transactions",    label: "Transactions" },
-  { key: "lab_results",     label: "Lab Results" },
-  { key: "prescriptions",   label: "Prescriptions" },
-  { key: "investments",     label: "Investments" },
-  { key: "loans",           label: "Loans" },
-  { key: "vitals",          label: "Vitals" },
-  { key: "trips",           label: "Trips" },
-  { key: "career_events",   label: "Career Events" },
-  { key: "goals",           label: "Goals" },
-  { key: "supplements",     label: "Supplements" },
-  { key: "generic_entries", label: "Other Notes" },
+  { key: "transactions",       label: "Transactions" },
+  { key: "lab_results",        label: "Lab Results" },
+  { key: "prescriptions",      label: "Prescriptions" },
+  { key: "investments",        label: "Investments" },
+  { key: "loans",              label: "Loans" },
+  { key: "vitals",             label: "Vitals" },
+  { key: "vaccinations",       label: "Vaccinations" },
+  { key: "insurance_policies", label: "Insurance" },
+  { key: "assets",             label: "Assets" },
+  { key: "trips",              label: "Trips" },
+  { key: "career_events",      label: "Career Events" },
+  { key: "goals",              label: "Goals" },
+  { key: "supplements",        label: "Supplements" },
+  { key: "plans",              label: "Plans" },
+  { key: "generic_entries",    label: "Other Notes" },
 ];
 
 function previewRecord(type, item) {
-  if (type === "transactions")  return `${item.date || ""} · ${item.category || ""} · ₹${item.amount || ""}`;
-  if (type === "lab_results")   return `${item.test || ""}: ${item.value || ""} ${item.unit || ""}`;
-  if (type === "prescriptions") return `${item.date || ""} · ${(item.medications || []).map((m) => m.name).join(", ")}`;
-  if (type === "investments")   return `${item.name || ""} (${item.kind || ""})`;
-  if (type === "loans")         return `${item.name || ""}: ₹${item.outstanding || ""}`;
-  if (type === "vitals")        return `${item.kind || ""}: ${item.value || ""} ${item.unit || ""}`;
-  if (type === "trips")         return `${item.name || ""} → ${item.destination || ""}`;
-  if (type === "career_events") return `${item.date || ""} · ${item.title || ""}`;
-  if (type === "goals")         return `${item.name || ""} · ₹${item.target_amount || ""}`;
-  if (type === "supplements")   return `${item.name || ""} · ${item.dose || ""} ${item.frequency || ""}`;
-  return item.title || item.name || "Record";
+  const who = item.member ? `[${item.member}] ` : "";
+  if (type === "transactions")       return `${who}${item.date || ""} · ${item.category || ""} · ₹${item.amount || ""}`;
+  if (type === "lab_results")        return `${who}${item.test || ""}: ${item.value ?? ""} ${item.unit || ""}`;
+  if (type === "prescriptions")      return `${who}${item.date || ""} · ${(item.medications || []).map((m) => m.name).join(", ")}`;
+  if (type === "investments")        return `${who}${item.name || ""} (${item.kind || ""})`;
+  if (type === "loans")              return `${who}${item.name || ""}: ₹${item.outstanding || ""}`;
+  if (type === "vitals")             return `${who}${item.kind || ""}: ${item.value || ""} ${item.unit || ""}`;
+  if (type === "vaccinations")       return `${who}${item.vaccine || ""} · ${item.date || ""}`;
+  if (type === "insurance_policies") return `${who}${item.provider || item.name || ""} (${item.policy_type || ""})`;
+  if (type === "assets")             return `${who}${item.name || ""} (${item.kind || ""}) · ₹${item.current_value ?? ""}`;
+  if (type === "trips")              return `${who}${item.name || ""} → ${item.destination || ""}`;
+  if (type === "career_events")      return `${who}${item.date || ""} · ${item.title || ""}`;
+  if (type === "goals")              return `${who}${item.name || ""} · ₹${item.target_amount || ""}`;
+  if (type === "supplements")        return `${who}${item.name || ""} · ${item.dose || ""} ${item.frequency || ""}`;
+  if (type === "plans")              return `${who}${item.name || ""} (${item.plan_type || ""}) · ${(item.items || []).length} items`;
+  return who + (item.title || item.name || "Record");
 }
 
 function countProposed(parsed) {
@@ -40,7 +49,7 @@ function countProposed(parsed) {
 
 // ── Diff/Confirm view ────────────────────────────────────────────────────────
 
-function DiffConfirmView({ result, busy, onApply, onSkip }) {
+function DiffConfirmView({ result, busy, onApply, onSkip, members = [], onMemberChange, correction, onCorrectionChange }) {
   const available = RECORD_TYPES.filter((t) => (result.parsed?.[t.key] || []).length > 0);
   const planUpdates = result.plan_updates || [];
 
@@ -65,20 +74,37 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
     onApply(selectedTypes, approvedGoalNames.length > 0 ? approvedGoalNames : null);
   };
 
+  const confidence = result.parsed?.confidence;
+  const lowConfidence = typeof confidence === "number" && confidence < 0.7;
+  const period = result.parsed?.statement_period;
+
   return (
     <div className="space-y-4" data-testid="diff-confirm-view">
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 flex-wrap">
         {isVision && (
           <span className="inline-flex items-center gap-1 text-xs bg-[#367A50]/10 text-[#367A50] border border-[#367A50]/20 rounded-full px-2.5 py-1 font-medium">
             <Sparkles className="h-3 w-3" /> Vision AI
           </span>
         )}
-        <div className="flex-1">
+        {typeof confidence === "number" && (
+          <span
+            data-testid="confidence-badge"
+            className={`inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 font-medium border ${
+              lowConfidence
+                ? "bg-[#D19B4C]/10 text-[#B07A2E] border-[#D19B4C]/30"
+                : "bg-[#367A50]/10 text-[#367A50] border-[#367A50]/20"
+            }`}
+          >
+            {lowConfidence ? "Low confidence — review carefully" : `Confidence ${(confidence * 100).toFixed(0)}%`}
+          </span>
+        )}
+        <div className="basis-full">
           <p className="text-sm font-medium text-[#111812] leading-snug">{result.parsed?.summary}</p>
           <p className="text-xs text-[#5E6A62] mt-0.5">
             Found {countProposed(result.parsed)} records across {available.length} categor{available.length === 1 ? "y" : "ies"}.
+            {period?.label && ` Period: ${period.label}.`}
             {planUpdates.length > 0 && ` Also ${planUpdates.length} goal target update${planUpdates.length > 1 ? "s" : ""}.`}
-            {" "}Choose what to save:
+            {" "}Choose what to save — you can reassign the person per record:
           </p>
         </div>
       </div>
@@ -125,8 +151,22 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
               {isOpen && (
                 <div className="px-3 pb-3 space-y-1 border-t border-[#E5E2DC] pt-2">
                   {items.map((item, i) => (
-                    <div key={t.key + '-' + i} className="text-xs text-[#5E6A62] bg-white rounded-lg px-2.5 py-1.5 border border-[#E5E2DC] truncate">
-                      {previewRecord(t.key, item)}
+                    <div key={t.key + '-' + i} className="flex items-center gap-2 text-xs text-[#5E6A62] bg-white rounded-lg px-2.5 py-1.5 border border-[#E5E2DC]">
+                      <span className="flex-1 truncate">{previewRecord(t.key, item)}</span>
+                      {members.length > 0 && onMemberChange && (
+                        <select
+                          value={item.member || ""}
+                          onChange={(e) => onMemberChange(t.key, i, e.target.value || null)}
+                          data-testid={`member-select-${t.key}-${i}`}
+                          className="text-xs bg-[#F2F0E9] border border-[#E5E2DC] rounded-md px-1.5 py-0.5 text-[#111812] max-w-[130px]"
+                          title="Assign to family member"
+                        >
+                          <option value="">Auto</option>
+                          {members.map((m) => (
+                            <option key={m.id} value={m.name}>{m.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -168,6 +208,17 @@ function DiffConfirmView({ result, busy, onApply, onSkip }) {
           </div>
         )}
       </div>
+
+      {onCorrectionChange && (
+        <input
+          type="text"
+          value={correction || ""}
+          onChange={(e) => onCorrectionChange(e.target.value)}
+          placeholder="Teach the parser (optional): e.g. 'Payslips from NVIDIA — ignore the YTD column'"
+          data-testid="correction-input"
+          className="w-full bg-white border border-[#E5E2DC] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#184A31]"
+        />
+      )}
 
       <div className="flex gap-3 pt-1">
         <button
@@ -239,21 +290,28 @@ export default function UniversalInbox({ open, onClose }) {
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState(null);
   const [proposedResult, setProposedResult] = useState(null);
+  const [correction, setCorrection] = useState("");
   const fileRef = useRef(null);
 
   if (!open) return null;
 
   const memberIdParam = activeMember === "family" ? null : activeMember;
 
-  // ── Text submit (auto-save, no confirmation needed) ──
+  // ── Text submit: dry-run first, then the same review modal as files ──
   const submitText = async () => {
     if (!text.trim()) { toast.error("Type something first"); return; }
     setBusy(true);
+    setLastResult(null);
+    setProposedResult(null);
     try {
-      const { data } = await api.post("/inbox/text", { text, member_id: memberIdParam });
-      setLastResult(data);
-      setText("");
-      toast.success("Captured & routed", { description: data.parsed?.summary });
+      const { data } = await api.post("/inbox/text", { text, member_id: memberIdParam, dry_run: true });
+      if (data.proposed && countProposed(data.parsed) > 0) {
+        setProposedResult({ ...data, document_id: null });
+        setText("");
+        toast.info("Analysed — review records below");
+      } else {
+        toast.info("Nothing structured found in that text", { description: data.parsed?.summary });
+      }
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not process");
     } finally { setBusy(false); }
@@ -272,6 +330,13 @@ export default function UniversalInbox({ open, onClose }) {
       fd.append("dry_run", "true");
       if (memberIdParam) fd.append("member_id", memberIdParam);
       const { data } = await api.post("/inbox/file", fd, { headers: { "Content-Type": "multipart/form-data" } });
+
+      if (data.duplicate) {
+        toast.warning("Already uploaded", {
+          description: `${data.existing_filename || "This file"} was uploaded on ${(data.uploaded_at || "").slice(0, 10)} — skipped to avoid duplicates.`,
+        });
+        return;
+      }
 
       if (data.proposed && countProposed(data.parsed) > 0) {
         setProposedResult(data);
@@ -301,6 +366,13 @@ export default function UniversalInbox({ open, onClose }) {
         selected_types: selectedTypes,
         approved_goal_names: approvedGoalNames,
       });
+      if (correction.trim()) {
+        try {
+          await api.post("/inbox/corrections", { text: correction.trim() });
+          toast.info("Correction saved — future uploads will use it");
+        } catch { /* non-fatal */ }
+        setCorrection("");
+      }
       setLastResult({ parsed: proposedResult.parsed, counts: data.counts, document_id: proposedResult.document_id });
       setProposedResult(null);
       const total = Object.values(data.counts || {}).reduce((a, b) => a + b, 0);
@@ -313,6 +385,16 @@ export default function UniversalInbox({ open, onClose }) {
   const skipProposed = () => {
     setProposedResult(null);
     toast.info("Records skipped — file is still stored in Documents");
+  };
+
+  // ── Reassign a proposed record to a different family member before saving ──
+  const changeRecordMember = (typeKey, index, memberName) => {
+    setProposedResult((prev) => {
+      if (!prev) return prev;
+      const items = [...(prev.parsed?.[typeKey] || [])];
+      items[index] = { ...items[index], member: memberName };
+      return { ...prev, parsed: { ...prev.parsed, [typeKey]: items } };
+    });
   };
 
   const exampleChips = [
@@ -348,13 +430,17 @@ export default function UniversalInbox({ open, onClose }) {
               busy={busy}
               onApply={applyProposed}
               onSkip={skipProposed}
+              members={members || []}
+              onMemberChange={changeRecordMember}
+              correction={correction}
+              onCorrectionChange={setCorrection}
             />
           ) : (
             <>
               <div className="text-xs text-[#5E6A62]">
                 Routing to:{" "}
                 <span className="font-medium text-[#184A31]">
-                  {activeMember === "family" ? "Auto-detect / first member" : members.find((m) => m.id === activeMember)?.name}
+                  {activeMember === "family" ? "Auto-detect from the document" : members.find((m) => m.id === activeMember)?.name}
                 </span>
               </div>
 
